@@ -156,7 +156,7 @@ table { border-collapse: collapse; width: 100%; }
 }
 
 *, *::before, *::after {
-  transition-property: background-color, border-color, color, transform, box-shadow, opacity;
+  transition-property: background-color, border-color, color, box-shadow, opacity;
   transition-duration: var(--motion-fast);
 }
 
@@ -1282,6 +1282,13 @@ PH.config = (function () {
 
   var MONEY_COLUMNS = { value: true, cumulative: true, price: true, priceAvg: true, priceMin: true, priceMax: true, movingAvg: true, valueOut: true };
   var BRASS_COLUMNS = { value: true, cumulative: true, priceAvg: true, priceMin: true, priceMax: true, movingAvg: true, valueOut: true };
+  // Columns that exist for on-screen interaction only (row id for
+  // drilldown/edit wiring, the actions cell) and were never meant to be
+  // printed or exported.
+  var VIRTUAL_COLUMNS = { id: true, actions: true };
+  function printableColumns(columns) {
+    return columns.filter(function (c) { return !VIRTUAL_COLUMNS[c]; });
+  }
 
   var COLUMN_DECIMALS = {
     value: 4, cumulative: 4, price: 4, priceMin: 4, priceMax: 4,
@@ -1313,7 +1320,9 @@ PH.config = (function () {
     BLOCK_SIZE_PRESETS: BLOCK_SIZE_PRESETS,
     COLUMN_LABELS: COLUMN_LABELS,
     MONEY_COLUMNS: MONEY_COLUMNS,
-    BRASS_COLUMNS: BRASS_COLUMNS
+    BRASS_COLUMNS: BRASS_COLUMNS,
+    VIRTUAL_COLUMNS: VIRTUAL_COLUMNS,
+    printableColumns: printableColumns
   };
 })();
 
@@ -3565,6 +3574,7 @@ PH.viewTable = (function () {
       columns: opts.columns,
       rows: [],
       filterRows: opts.filterRows || [],
+      scopeRowIds: opts.scopeRowIds || null,
       rowKind: opts.rowKind || function () { return "data"; },
       onCellEdit: opts.onCellEdit || null,
       onRowEdit: opts.onRowEdit || null,
@@ -3769,13 +3779,17 @@ PH.viewTable = (function () {
 
     function doFill(column, direction) {
       var rows = store.getSourceRows();
-      var result = store.fillBlanks(rows, { column: column, direction: direction, mode: "blanksOnly", boundaryColumn: "book", scopeRowIds: opts.scopeRowIds });
+      var result = store.fillBlanks(rows, { column: column, direction: direction, mode: "blanksOnly", boundaryColumn: "book", scopeRowIds: state.scopeRowIds });
       store.setSourceRows(result.rows, "ملء الفراغات: " + (cfg.COLUMN_LABELS[column] || column));
       if (opts.onToast) opts.onToast("تم ملء " + result.filledCount + " خلية · تراجع", true);
     }
 
-    function setRows(rows) {
+    function setRows(rows, moreOpts) {
       state.rows = rows;
+      if (moreOpts) {
+        if (moreOpts.filterRows !== undefined) state.filterRows = moreOpts.filterRows;
+        if (moreOpts.scopeRowIds !== undefined) state.scopeRowIds = moreOpts.scopeRowIds;
+      }
       bodyTable.setAttribute("aria-rowcount", String(rows.length));
       sizer.style.height = (rows.length * ROW_H) + "px";
       renderWindow();
@@ -5692,7 +5706,7 @@ PH.app = (function () {
     toolbar.appendChild(zipExportBtn);
     container.appendChild(toolbar);
 
-    var tableArea = el("div", { class: "card" });
+    var tableArea = el("div", { class: "card", id: "table-area" });
     container.appendChild(tableArea);
     renderTableArea(tableArea);
 
@@ -5862,6 +5876,15 @@ PH.app = (function () {
   }
 
   function renderTableArea(container) {
+    if (!container || !container.isConnected) {
+      // A closure (search debounce, onSort, onFilterChange) captured a
+      // tableArea from a previous renderMain() that has since been replaced
+      // by a full render(). Re-resolve the live one instead of rebuilding
+      // the table into a detached, invisible orphan.
+      var liveContainer = $("table-area");
+      if (!liveContainer) return;
+      container = liveContainer;
+    }
     var sheet = computeActiveSheet();
     var repDef = cfg.REPORTS_BY_ID[state.activeReportId];
     var textCols = repDef.columns.filter(function (c) { return !cfg.MONEY_COLUMNS[c] && c !== "pageNo" && c !== "printPageNo"; });
@@ -5872,9 +5895,18 @@ PH.app = (function () {
     var countLabel = $("row-count-label");
     if (countLabel) countLabel.textContent = "عرض " + pipeline.resultCount + " من " + pipeline.totalCount;
 
-    var newKey = state.activeReportId + "|" + sheet.rows.length;
+    var scopeRowIds = store.getSourceRows().filter(function (row) { return filterActiveRows([row], state.activeCombination).length > 0; }).map(function (row) { return row.id; });
+
+    // reportId + row count let two different scopes with the same row count
+    // silently reuse each other's controller (and, worse, its stale
+    // scopeRowIds/filterRows closure). Key on everything that actually
+    // changes what "this table" means.
+    var newKey = state.activeReportId + "|" + matrix.combinationKey(state.activeCombination) +
+      "|month=" + (state.activeMonth || "*") +
+      "|filterIds=" + (state.sourceRowFilterIds ? state.sourceRowFilterIds.join(",") : "*") +
+      "|cols=" + repDef.columns.join(",");
     if (tableController && tableControllerKey === newKey && tableControllerContainer === container) {
-      tableController.setRows(displayRows);
+      tableController.setRows(displayRows, { filterRows: sheet.rows, scopeRowIds: scopeRowIds });
       return;
     }
     if (tableController) tableController.destroy();
@@ -5886,7 +5918,7 @@ PH.app = (function () {
       filterRows: sheet.rows,
       fillableColumns: validate.FILL_PRONE_TEXT_FIELDS,
       quantityColumns: ["dispensed", "received", "balance"],
-      scopeRowIds: store.getSourceRows().filter(function (row) { return filterActiveRows([row], state.activeCombination).length > 0; }).map(function (row) { return row.id; }),
+      scopeRowIds: scopeRowIds,
       onToast: showToast,
       queryState: state.queryState,
       onRowEdit: state.activeReportId === "sourceRows" ? openSourceRowEditor : null,
@@ -6365,6 +6397,15 @@ PH.app = (function () {
     render();
   }
 
+  function updateSaveStateEl() {
+    var saveEl = $("save-state");
+    if (saveEl) {
+      var s = store.getSaveState();
+      saveEl.textContent = s === "saved" ? "تم الحفظ" : (s === "pending" ? "جارِ الحفظ…" : (s === "error" ? "تعذّر الحفظ — صدّر نسخة احتياطية" : ""));
+      saveEl.style.color = s === "error" ? "var(--err)" : "";
+    }
+  }
+
   function render() {
     renderReportTabs($("report-tabs"));
     renderScopeBar($("scope-bar"));
@@ -6374,12 +6415,7 @@ PH.app = (function () {
     var printBtn = $("btn-print");
     if (importBtn) importBtn.style.display = hasData ? "none" : "";
     if (printBtn) printBtn.style.display = hasData ? "" : "none";
-    var saveEl = $("save-state");
-    if (saveEl) {
-      var s = store.getSaveState();
-      saveEl.textContent = s === "saved" ? "تم الحفظ" : (s === "pending" ? "جارِ الحفظ…" : (s === "error" ? "تعذّر الحفظ — صدّر نسخة احتياطية" : ""));
-      saveEl.style.color = s === "error" ? "var(--err)" : "";
-    }
+    updateSaveStateEl();
   }
 
   function bindKeyboard() {
@@ -6453,6 +6489,7 @@ PH.app = (function () {
     var repDef = cfg.REPORTS_BY_ID[state.activeReportId];
     var settings = resolveSettings(state.activeReportId, sheetKeyFor(state.activeReportId, state.activeCombination));
     var outputRows = outputRowsFor(sheet, repDef);
+    var printColumns = cfg.printableColumns(repDef.columns);
     // Single source of truth for "did the active filter actually change what's being
     // printed" - drives both the header label suffix and the print footer marker, so
     // the two can no longer disagree with each other.
@@ -6491,7 +6528,7 @@ PH.app = (function () {
         shell.appendChild(PH.print.buildCalibrationRulerPage(calibration, orientation));
         previewContainer.appendChild(shell);
       } else {
-        PH.print.renderPreview(previewContainer, outputRows, { rowsPerPage: settings.rowsPerPage || 24, columns: repDef.columns, reportLabel: reportLabel, orientation: orientation, calibration: calibration, isFiltered: didApplyView, hasFilledMoney: outputRows.some(function (r) { return r.__filled; }), printTotalField: repDef.printTotalField });
+        PH.print.renderPreview(previewContainer, outputRows, { rowsPerPage: settings.rowsPerPage || 24, columns: printColumns, reportLabel: reportLabel, orientation: orientation, calibration: calibration, isFiltered: didApplyView, hasFilledMoney: outputRows.some(function (r) { return r.__filled; }), printTotalField: repDef.printTotalField });
       }
     }
 
@@ -6556,7 +6593,7 @@ PH.app = (function () {
       if (calPanel.style.display !== "none") buildCalPanel();
     });
     printBtn.addEventListener("click", function () {
-      PH.print.runPrintJob(outputRows, { rowsPerPage: settings.rowsPerPage || 24, columns: repDef.columns, reportLabel: reportLabel, orientation: orientation, calibration: calibration, isFiltered: didApplyView, hasFilledMoney: outputRows.some(function (r) { return r.__filled; }), printTotalField: repDef.printTotalField });
+      PH.print.runPrintJob(outputRows, { rowsPerPage: settings.rowsPerPage || 24, columns: printColumns, reportLabel: reportLabel, orientation: orientation, calibration: calibration, isFiltered: didApplyView, hasFilledMoney: outputRows.some(function (r) { return r.__filled; }), printTotalField: repDef.printTotalField });
     });
 
     store.loadCalibrationProfiles().then(function (profiles) {
@@ -6576,7 +6613,7 @@ PH.app = (function () {
     var monthValues = store.getSourceRows().map(function (r) { return r.month; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
     var exportMonth = monthValues.length === 1 ? monthValues[0] : (monthValues.length ? "متعدد" : "غير-محدد");
     var name = PH.exporter.exportSingleWorkbook(
-      [{ rows: outputRows, columns: repDef.columns, combination: state.activeCombination }],
+      [{ rows: outputRows, columns: cfg.printableColumns(repDef.columns), combination: state.activeCombination }],
       { month: exportMonth, reportId: state.activeReportId }
     );
     showToast("تم تصدير " + name);
@@ -6597,7 +6634,7 @@ PH.app = (function () {
     }
     var sheets = combos.map(function (m) {
       var sheet = computeSheetFor(reportId, m.combination);
-      return { rows: sheet.rows, columns: repDef.columns, combination: m.combination };
+      return { rows: sheet.rows, columns: cfg.printableColumns(repDef.columns), combination: m.combination };
     });
     var monthValues = rows.map(function (r) { return r.month; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
     var exportMonth = monthValues.length === 1 ? monthValues[0] : (monthValues.length ? "متعدد" : "غير-محدد");
@@ -6661,7 +6698,10 @@ PH.app = (function () {
     bindOverflowMenu();
     var paletteTrigger = $("btn-palette-trigger");
     if (paletteTrigger) paletteTrigger.addEventListener("click", openCommandPalette);
-    store.onChange(function () { render(); });
+    store.onChange(function (event) {
+      if (event && event.type === "save-state") { updateSaveStateEl(); return; }
+      render();
+    });
     document.addEventListener("ph-import-file", function (e) { startImportFlow(e.detail); });
     document.getElementById("btn-add").addEventListener("click", openGuidedFormOverlay);
     if (/[?&]selftest=1/.test(window.location.search)) runSelfTestOverlay();
