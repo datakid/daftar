@@ -2061,7 +2061,7 @@ PH.reports = (function () {
   }
 
   function valueSFromScaled(priceS, qtyS) {
-    return priceS * qtyS / 1000n;
+    return blk.divRoundBigInt(priceS * qtyS, 1000n);
   }
 
   function scaleValueOf(quantity, price) {
@@ -2232,16 +2232,21 @@ PH.reports = (function () {
     var groups = groupRows(filtered, ["name", "unit", "price"]);
 
     var grouped = groups.map(function (g) {
-      var balanceSumS = 0n;
-      for (var i = 0; i < g.rows.length; i++) balanceSumS += toScaledQtyBig(g.rows[i].balance);
       var price = g.display.price;
       var priceS = toScaledPriceBig(price);
+      var balanceSumS = 0n;
+      var valueSum = 0n;
+      for (var i = 0; i < g.rows.length; i++) {
+        var rowBalanceS = toScaledQtyBig(g.rows[i].balance);
+        balanceSumS += rowBalanceS;
+        valueSum += valueSFromScaled(priceS, rowBalanceS);
+      }
       return {
         name: g.display.name,
         unit: g.display.unit,
         price: price,
         balance: Number(balanceSumS) / cfg.SCALE_QTY,
-        value: valueSFromScaled(priceS, balanceSumS),
+        value: valueSum,
         __book: g.firstRow.book,
         __pageNo: isBlank(g.firstRow.pageNo) ? null : g.firstRow.pageNo,
         sourceIds: g.rows.map(function (sourceRow) { return sourceRow.id; }).filter(Boolean)
@@ -3162,7 +3167,7 @@ PH.average = (function () {
   function isBlank(v) { return v === null || v === undefined || v === ""; }
 
   function emptyPriceAcc() {
-    return { wq: 0n, wqp: 0n, sp: 0n, n: 0, min: null, max: null, keys: new Set(), filledN: 0 };
+    return { wq: 0n, wqp: 0n, sp: 0n, n: 0, min: null, max: null, keys: new Set(), filledN: 0, rowValueSum: 0n };
   }
 
   function mergePriceAcc(a, b) {
@@ -3173,7 +3178,8 @@ PH.average = (function () {
       min: a.min === null ? b.min : (b.min === null ? a.min : (a.min < b.min ? a.min : b.min)),
       max: a.max === null ? b.max : (b.max === null ? a.max : (a.max > b.max ? a.max : b.max)),
       keys: keys,
-      filledN: a.filledN + b.filledN
+      filledN: a.filledN + b.filledN,
+      rowValueSum: a.rowValueSum + b.rowValueSum
     };
   }
 
@@ -3183,7 +3189,11 @@ PH.average = (function () {
       wq: w, wqp: w * priceScaled, sp: priceScaled, n: 1,
       min: priceScaled, max: priceScaled,
       keys: new Set([priceScaled.toString()]),
-      filledN: wasFilled ? 1 : 0
+      filledN: wasFilled ? 1 : 0,
+      // Round at the row: each row's contribution to the value total is
+      // rounded once here, matching valueSFromScaled, so summing rows never
+      // disagrees with computeMovement/computeGroups summing the same rows.
+      rowValueSum: blk.divRoundBigInt(w * priceScaled, 1000n)
     };
     return mergePriceAcc(acc, single);
   }
@@ -3211,7 +3221,7 @@ PH.average = (function () {
   }
 
   function valueAtValueScale(acc) {
-    return blk.divRoundBigInt(acc.wqp, QS);
+    return acc.rowValueSum;
   }
 
   function quantityAtDisplayScale(acc) {
@@ -3221,14 +3231,15 @@ PH.average = (function () {
   function accumulateGroup(rows, weightField, zeroWeightPolicy) {
     var acc = emptyPriceAcc();
     rows.forEach(function (row) {
-      var priceScaled = blk.toBigInt(reports.scalePrice(row.price));
       var weightRaw = row[weightField];
-      var weightScaled;
-      if (isBlank(weightRaw) || weightRaw === 0) {
-        weightScaled = zeroWeightPolicy === "weight-one" ? 1n : 0n;
-      } else {
-        weightScaled = blk.toBigInt(reports.scaleQty(weightRaw));
+      var isZero = isBlank(weightRaw) || weightRaw === 0;
+      if (isZero && zeroWeightPolicy !== "weight-one") {
+        // "exclude" means excluded: the row contributes nothing to count,
+        // min/max, or the distinct-price set — not weight zero folded in.
+        return;
       }
+      var priceScaled = blk.toBigInt(reports.scalePrice(row.price));
+      var weightScaled = isZero ? 1n : blk.toBigInt(reports.scaleQty(weightRaw));
       var wasFilled = !!(row.__filled && row.__filled[weightField]);
       acc = addRowToPriceAcc(acc, priceScaled, weightScaled, wasFilled);
     });
@@ -3345,8 +3356,9 @@ PH.average = (function () {
 
   function computeMovingAverage(rows) {
     var source = rows.filter(function (row) { return row.book !== cfg.TOTAL_ROW_MARKER; });
-    var events = eventSequence(source).map(function (row) {
+    var events = eventSequence(source).map(function (row, index) {
       return {
+        index: index,
         source: row,
         book: row.book,
         serial: row.serial,
@@ -3357,9 +3369,24 @@ PH.average = (function () {
         price_s: BigInt(Math.round((row.price || 0) * Number(PS)))
       };
     });
-    var costing = runMovingAverage(events, { window: 0 });
-    var output = events.map(function (event, index) {
-      var result = costing[index];
+
+    // Each stock item carries its own running quantity/avg cost; pooling every
+    // item through a single accumulator (the old behaviour) let one item's
+    // receipts blend into another item's cost. Partition by the same
+    // normalized name+unit identity computeAveragePrices uses, cost each
+    // item's chronological sub-stream independently, then scatter the
+    // per-event results back into the original display order.
+    var itemGroups = reports.groupRows(events, ["name", "unit"]);
+    var costingByIndex = new Array(events.length);
+    itemGroups.forEach(function (g) {
+      var itemCosting = runMovingAverage(g.rows, { window: 0 });
+      g.rows.forEach(function (event, i) {
+        costingByIndex[event.index] = itemCosting[i];
+      });
+    });
+
+    var output = events.map(function (event) {
+      var result = costingByIndex[event.index];
       return {
         book: event.book,
         serial: event.serial,
@@ -4810,16 +4837,43 @@ PH.selftest = (function () {
     var result = makeResult();
     var avgResult = avg.computeAveragePrices(source, { weightField: "dispensed" });
     var movementResult = reports.computeMovement(source, { blockSize: 10, cumulativeMode: "block", showPartialBlockTotal: true });
-    var reconcileDiff = avgResult.grandTotal.value - movementResult.grandTotal;
-    if (reconcileDiff < 0n) reconcileDiff = -reconcileDiff;
-    var reconcileTolerance = BigInt(source.length) + 1n;
-    check(result, reconcileDiff <= reconcileTolerance, "average-report reconciliation with movement grand total (diff=" + reconcileDiff + ", tolerance=" + reconcileTolerance + ")");
+    var groupsResult = reports.computeGroups(source, { blockSize: 10, cumulativeMode: "block", showPartialBlockTotal: true });
+
+    // Round at the row, sum exactly: every report sums the same per-row
+    // rounded values, so these must agree to the last scaled unit - zero
+    // tolerance, not "close enough".
+    check(result, avgResult.grandTotal.value === movementResult.grandTotal,
+      "average-report reconciles exactly with movement grand total (avg=" + avgResult.grandTotal.value + ", movement=" + movementResult.grandTotal + ")");
+    check(result, groupsResult.grandTotal === movementResult.grandTotal,
+      "groups-report reconciles exactly with movement grand total (groups=" + groupsResult.grandTotal + ", movement=" + movementResult.grandTotal + ")");
 
     avgResult.rows.forEach(function (r) {
       if (r.priceMin === null) return;
       var wavgPS = avg.weightedAverageAtPS(r.__acc);
       check(result, r.priceMin <= wavgPS && wavgPS <= r.priceMax, "bounds for " + r.name + " " + r.unit);
     });
+
+    return result;
+  }
+
+  function runMovingAverageInvariants() {
+    var result = makeResult();
+
+    // Two items received and dispensed in the same books/months at
+    // different prices. Pooling them through one accumulator (the pre-fix
+    // behaviour) would blend Item B's price into Item A's cost. Each item's
+    // moving average must depend only on its own receipts.
+    var rows = [
+      { book: "A", serial: 1, name: "Item A", unit: "علبة", month: "2026-01", received: 10, dispensed: 0, price: 10 },
+      { book: "A", serial: 2, name: "Item B", unit: "علبة", month: "2026-01", received: 10, dispensed: 0, price: 100 },
+      { book: "A", serial: 3, name: "Item A", unit: "علبة", month: "2026-01", received: 0, dispensed: 5, price: 10 },
+      { book: "A", serial: 4, name: "Item B", unit: "علبة", month: "2026-01", received: 0, dispensed: 5, price: 100 }
+    ];
+    var out = avg.computeMovingAverage(rows).rows;
+    check(result, out[2].movingAvg === 100000n, "Item A moving average unaffected by Item B's price (got " + out[2].movingAvg + ")");
+    check(result, out[3].movingAvg === 1000000n, "Item B moving average unaffected by Item A's price (got " + out[3].movingAvg + ")");
+    check(result, out[2].valueOut === 500000n, "Item A dispense costed at its own average (got " + out[2].valueOut + ")");
+    check(result, out[3].valueOut === 5000000n, "Item B dispense costed at its own average (got " + out[3].valueOut + ")");
 
     return result;
   }
@@ -4907,25 +4961,24 @@ PH.selftest = (function () {
     source.forEach(function (r) {
       if (r.dispensed === null || r.dispensed === undefined || r.dispensed === 0) return;
       movementRowCount++;
-      movementGrand += scalePriceBigLocal(r.price) * scaleQtyBigLocal(r.dispensed) / 1000n;
+      movementGrand += blk.divRoundBigInt(scalePriceBigLocal(r.price) * scaleQtyBigLocal(r.dispensed), 1000n);
     });
 
     var groupsGrand = 0n;
     source.forEach(function (r) {
       if (r.book === cfg.TOTAL_ROW_MARKER) return;
-      groupsGrand += scalePriceBigLocal(r.price) * scaleQtyBigLocal(r.dispensed) / 1000n;
+      groupsGrand += blk.divRoundBigInt(scalePriceBigLocal(r.price) * scaleQtyBigLocal(r.dispensed), 1000n);
     });
 
-    var yiGroups = {};
+    // Round at the row: each source row's value is rounded once, then summed
+    // per group - never round the group's summed balance. Matches
+    // computeYearlyInventory (see 2026-08 review).
+    var yiGrand = 0n;
     source.forEach(function (r) {
       if (r.book === cfg.TOTAL_ROW_MARKER) return;
       if (r.balance === null || r.balance === undefined || r.balance === 0) return;
-      var key = r.name + "\u0001" + r.unit + "\u0001" + r.price;
-      if (!yiGroups[key]) yiGroups[key] = { priceS: scalePriceBigLocal(r.price), balanceS: 0n };
-      yiGroups[key].balanceS += scaleQtyBigLocal(r.balance);
+      yiGrand += blk.divRoundBigInt(scalePriceBigLocal(r.price) * scaleQtyBigLocal(r.balance), 1000n);
     });
-    var yiGrand = 0n;
-    Object.keys(yiGroups).forEach(function (k) { yiGrand += yiGroups[k].priceS * yiGroups[k].balanceS / 1000n; });
 
     var balGroups = {};
     source.forEach(function (r) {
@@ -5050,6 +5103,7 @@ PH.selftest = (function () {
       reportParity: runReportParity(source, expected),
       print: runPrintInvariants(),
       average: runAverageInvariants(source),
+      movingAverage: runMovingAverageInvariants(),
       fill: runFillInvariants(),
       regressions: runRegressionInvariants()
     };
@@ -5062,7 +5116,7 @@ PH.selftest = (function () {
     return Promise.resolve({ suites: suites, totalPass: totalPass, totalFail: totalFail, failures: allFailures });
   }
 
-  return { runAll: runAll, runBlocksInvariants: runBlocksInvariants, runPrintInvariants: runPrintInvariants, runRegressionInvariants: runRegressionInvariants, generateFixtureSource: generateFixtureSource };
+  return { runAll: runAll, runBlocksInvariants: runBlocksInvariants, runPrintInvariants: runPrintInvariants, runAverageInvariants: runAverageInvariants, runMovingAverageInvariants: runMovingAverageInvariants, runRegressionInvariants: runRegressionInvariants, generateFixtureSource: generateFixtureSource };
 })();
 
 
