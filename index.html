@@ -1732,13 +1732,17 @@ PH.store = (function () {
     var filledCount = 0;
 
     function markFilled(rowIndex, sourceRowIndex) {
-      if (!out[rowIndex].__filled) out[rowIndex].__filled = {};
+      // out[rowIndex] is a shallow copy of the source row, so __filled (an
+      // object) is still the SAME reference as the original row's __filled -
+      // writing into it directly would mutate an object that may also be
+      // sitting in an undo snapshot. Clone it first.
+      out[rowIndex].__filled = Object.assign({}, out[rowIndex].__filled);
       out[rowIndex].__filled[column] = { sourceRowIndex: sourceRowIndex, direction: direction, mode: mode, at: Date.now() };
     }
 
     sequence.forEach(function (i) {
       var row = rows[i];
-      if (boundaryColumn) {
+      if (boundaryColumn && boundaryColumn !== column) {
         var boundaryVal = row[boundaryColumn];
         if (!boundaryStarted || boundaryVal !== lastBoundaryValue) {
           lastValue = undefined;
@@ -2942,7 +2946,8 @@ PH.validate = (function () {
     var seenKeys = {};
     var rowProblems = [];
     for (var i = 0; i < rows.length; i++) {
-      var p = checkRow(rows[i], i, seenKeys, mappedFields);
+      var stableIndex = rows[i].__idx !== undefined ? rows[i].__idx : i;
+      var p = checkRow(rows[i], stableIndex, seenKeys, mappedFields);
       rowProblems = rowProblems.concat(p);
     }
     problems = problems.concat(rowProblems);
@@ -5132,6 +5137,7 @@ PH.app = (function () {
   var importer = PH.importer;
   var average = PH.average;
   var norm = PH.normalize;
+  var blk = PH.blocks;
 
   var state = {
     activeReportId: "movement",
@@ -5140,6 +5146,7 @@ PH.app = (function () {
     dimensionGroups: { budget: null, shift: null, dispense: null },
     queryState: { filters: [], searchText: "", sortLevels: [], groupColumns: [], aggregates: {} },
       settingsOverrides: { global: {}, report: {}, sheet: {}, linked: {} },
+      settingsVersion: 0,
       view: "empty",
       pendingImport: null,
       sourceRowFilterIds: null,
@@ -5193,17 +5200,20 @@ PH.app = (function () {
     var bucket = state.settingsOverrides[scopeName];
     if (!bucket[scopeKey]) bucket[scopeKey] = {};
     for (var k in fields) bucket[scopeKey][k] = fields[k];
+    state.settingsVersion++;
     var dbScope = scopeName === "global" ? "global" : scopeName + ":" + scopeKey;
     return store.saveSettingsMulti(dbScope, fields);
   }
 
   function applyLinkedSettingChange(reportId, value) {
     state.settingsOverrides.linked[reportId] = value;
+    state.settingsVersion++;
     store.saveSettings("meta", "linked", state.settingsOverrides.linked);
   }
 
   function resetSettingsScope(scopeName, scopeKey) {
     state.settingsOverrides[scopeName][scopeKey] = {};
+    state.settingsVersion++;
     var dbScope = scopeName === "global" ? "global" : scopeName + ":" + scopeKey;
     return store.clearSettingsScope(dbScope);
   }
@@ -5371,7 +5381,7 @@ PH.app = (function () {
   function computeSheetFor(reportId, combination) {
     var rows = store.getSourceRows();
     var settings = resolveSettings(reportId, sheetKeyFor(reportId, combination));
-    var signature = matrix.buildSignature(["sheet", reportId, matrix.combinationKey(combination), state.activeMonth || "*", state.sourceRowFilterIds || "*", state.dimensionGroups, settings, store.getRowsVersion()]);
+    var signature = matrix.buildSignature(["sheet", reportId, matrix.combinationKey(combination), state.activeMonth || "*", state.sourceRowFilterIds || "*", state.dimensionGroups, settings, state.settingsVersion, store.getRowsVersion()]);
     return matrix.computeMemoized(signature, function () {
       var scoped = filterActiveRows(rows, combination);
 
@@ -5532,7 +5542,11 @@ PH.app = (function () {
     mergeBtn.addEventListener("click", function () {
       var chosen = Object.keys(selected);
       if (chosen.length < 2) { showToast("اختر قيمتين على الأقل للدمج", false); return; }
-      var remaining = partition.filter(function (g) { return !g.some(function (v) { return chosen.indexOf(v) !== -1; }); });
+      var remaining = [];
+      partition.forEach(function (g) {
+        var keep = g.filter(function (v) { return chosen.indexOf(v) === -1; });
+        if (keep.length) remaining.push(keep);
+      });
       var newPartition = remaining.concat([chosen]);
       state.dimensionGroups[dim] = newPartition;
       resetQueryState();
@@ -6086,6 +6100,7 @@ PH.app = (function () {
         rows = result.rows;
       });
       wiz.extracted = rows;
+      wiz.extracted.forEach(function (row, i) { row.__idx = i; });
       wiz.enumCoercions = [];
       ["budget", "shift", "dispense"].forEach(function (key) {
         var domain = cfg.DIMENSIONS[key];
@@ -6103,7 +6118,7 @@ PH.app = (function () {
     }
 
     function revalidate() {
-      var rows = wiz.extracted.filter(function (r, i) { return !wiz.excludedRowIndexes[i]; });
+      var rows = wiz.extracted.filter(function (r) { return !wiz.excludedRowIndexes[r.__idx]; });
       wiz.validation = validate.validateDataset(rows, wiz.mapping);
       wiz.rowsForCommit = rows;
     }
@@ -6406,11 +6421,24 @@ PH.app = (function () {
     return state.queryState.filters.length > 0 || !!state.queryState.searchText || state.queryState.sortLevels.length > 0;
   }
 
+  function reportUsesBlocking(repDef) {
+    return repDef.columns.indexOf("cumulative") !== -1;
+  }
+
   function outputRowsFor(sheet, repDef) {
     if (!state.applyToPrintExport || !isViewFiltered()) return sheet.rows;
     var textCols = repDef.columns.filter(function (c) { return !cfg.MONEY_COLUMNS[c] && c !== "pageNo" && c !== "printPageNo"; });
     var pipeline = query.runPipeline(sheet.rows, state.queryState, textCols, columnTypesFor(repDef.columns));
-    return pipeline.sorted;
+    var filteredRows = pipeline.sorted;
+    if (!reportUsesBlocking(repDef)) return filteredRows;
+    var settings = resolveSettings(repDef.id, sheetKeyFor(repDef.id, state.activeCombination));
+    return blk.applyBlocks(filteredRows, {
+      blockSize: settings.blockSize,
+      cumulativeMode: settings.cumulativeMode,
+      cumulativeAgg: settings.cumulativeAgg || "sum",
+      showPartialBlockTotal: settings.showPartialBlockTotal,
+      valueField: "value"
+    });
   }
 
   function activeScopeSuffix() {
@@ -6689,7 +6717,7 @@ PH.app = (function () {
         if (!payload || payload.format !== "daftar-workspace" || !Array.isArray(payload.rows)) throw new Error("صيغة نسخة غير معروفة");
         if (!window.confirm("سيؤدي الاستعادة إلى استبدال البيانات الحالية. هل تريد المتابعة؟")) return;
         store.setSourceRows(payload.rows, "استعادة نسخة احتياطية", true);
-        if (payload.settingsOverrides) state.settingsOverrides = Object.assign({ global: {}, report: {}, sheet: {}, linked: {} }, payload.settingsOverrides);
+        if (payload.settingsOverrides) { state.settingsOverrides = Object.assign({ global: {}, report: {}, sheet: {}, linked: {} }, payload.settingsOverrides); state.settingsVersion++; }
         if (payload.activeMonth !== undefined) state.activeMonth = payload.activeMonth;
         if (payload.activeReportId && cfg.REPORTS_BY_ID[payload.activeReportId]) state.activeReportId = payload.activeReportId;
         if (payload.dimensionGroups) state.dimensionGroups = payload.dimensionGroups;
