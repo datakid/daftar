@@ -691,7 +691,17 @@ table.grid { table-layout: fixed; }
 .grid tbody tr[aria-selected="true"] td:first-child { border-inline-start: 2px solid var(--ink); }
 
 .grid tr.block-close td {
-  border-bottom: 2px solid var(--line-strong);
+  box-shadow:
+    inset 0 -2px 0 0 color-mix(in srgb, var(--err) 40%, transparent),
+    inset 0 -4px 0 0 var(--paper),
+    inset 0 -6px 0 0 var(--line-strong);
+}
+
+.grid tbody tr:hover.block-close td, .grid tbody tr[aria-selected="true"].block-close td {
+  box-shadow:
+    inset 0 -2px 0 0 color-mix(in srgb, var(--err) 40%, transparent),
+    inset 0 -4px 0 0 color-mix(in srgb, var(--paper-sunken) 50%, var(--paper)),
+    inset 0 -6px 0 0 var(--line-strong);
 }
 
 .grid tr.block-close td.cell-num.money {
@@ -708,6 +718,23 @@ table.grid { table-layout: fixed; }
 .grid tr.group-header .count { font-family: var(--font-num); color: var(--text-soft); }
 
 .grid tr.filler td { color: transparent; user-select: none; }
+
+.grid tr.page-break-row td {
+  border-top: 1px dashed color-mix(in srgb, var(--brass) 35%, transparent);
+  border-bottom: none;
+  text-align: center;
+  padding: 0;
+}
+
+.page-break-row__caption {
+  display: inline-block;
+  background: var(--paper);
+  padding: 0 var(--sp-2);
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  font-size: var(--fs-caption);
+  font-family: var(--font-num);
+}
 
 .cell--filled {
   text-decoration: underline;
@@ -805,6 +832,16 @@ table.grid { table-layout: fixed; }
 .drop-zone svg { color: var(--ink); stroke-width: 1.5; }
 
 .drop-zone__headline { font-family: var(--font-display); font-size: var(--fs-title); }
+
+.table-empty-state {
+  padding: var(--sp-8) var(--sp-4);
+  text-align: center;
+  color: var(--text-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+}
 
 .panel-2 {
   background: var(--paper-raised);
@@ -1177,7 +1214,7 @@ PH.config = (function () {
       order: 1,
       shortcut: "1",
       requiresOptional: [],
-      defaults: { rowsPerPage: 10, blockSize: 10, cumulativeMode: "block", cumulativeAgg: "sum", showPartialBlockTotal: true },
+      defaults: { rowsPerPage: 10, blockSize: 10, cumulativeMode: "block", cumulativeAgg: "sum", showPartialBlockTotal: true, showPageMarkers: true },
       columns: ["name", "unit", "dispensed", "price", "value", "cumulative"],
       printTotalField: "value"
     },
@@ -1187,7 +1224,7 @@ PH.config = (function () {
       order: 2,
       shortcut: "2",
       requiresOptional: ["balance"],
-      defaults: { rowsPerPage: 24, blockSize: 24, cumulativeMode: "running", cumulativeAgg: "sum", showPartialBlockTotal: true },
+      defaults: { rowsPerPage: 24, blockSize: 24, cumulativeMode: "running", cumulativeAgg: "sum", showPartialBlockTotal: true, showPageMarkers: true },
       columns: ["name", "unit", "balance", "price", "value", "cumulative"],
       printTotalField: "value"
     },
@@ -1197,7 +1234,7 @@ PH.config = (function () {
       order: 3,
       shortcut: "3",
       requiresOptional: ["balance"],
-      defaults: { rowsPerPage: 24, blockSize: null, cumulativeMode: "none", cumulativeAgg: "sum", showPartialBlockTotal: true },
+      defaults: { rowsPerPage: 24, blockSize: null, cumulativeMode: "none", cumulativeAgg: "sum", showPartialBlockTotal: true, showPageMarkers: true },
       columns: ["book", "serial", "name", "unit", "dispensed", "balance"],
       printTotalField: null
     },
@@ -1207,7 +1244,7 @@ PH.config = (function () {
       order: 4,
       shortcut: "4",
       requiresOptional: [],
-      defaults: { rowsPerPage: 24, blockSize: null, cumulativeMode: "none", cumulativeAgg: "sum", showPartialBlockTotal: true },
+      defaults: { rowsPerPage: 24, blockSize: null, cumulativeMode: "none", cumulativeAgg: "sum", showPartialBlockTotal: true, showPageMarkers: true },
       columns: ["printPageNo", "value", "budget", "shift", "dispense"],
       printTotalField: "value"
     },
@@ -1217,7 +1254,7 @@ PH.config = (function () {
       order: 5,
       shortcut: "5",
       requiresOptional: ["group"],
-      defaults: { rowsPerPage: 9, blockSize: null, cumulativeMode: "none", cumulativeAgg: "sum", showPartialBlockTotal: true },
+      defaults: { rowsPerPage: 9, blockSize: null, cumulativeMode: "none", cumulativeAgg: "sum", showPartialBlockTotal: true, showPageMarkers: true },
       columns: ["group", "value"],
       printTotalField: "value"
     },
@@ -1227,7 +1264,7 @@ PH.config = (function () {
       order: 6,
       shortcut: "6",
       requiresOptional: [],
-      defaults: { rowsPerPage: 24, blockSize: null, cumulativeMode: "none", cumulativeAgg: "wmean", showPartialBlockTotal: true },
+      defaults: { rowsPerPage: 24, blockSize: null, cumulativeMode: "none", cumulativeAgg: "wmean", showPartialBlockTotal: true, showPageMarkers: true },
       columns: ["name", "unit", "priceCount", "priceMin", "priceMax", "priceAvg", "qty", "value", "variancePct"],
       printTotalField: "value"
     },
@@ -1237,7 +1274,7 @@ PH.config = (function () {
       order: 7,
       shortcut: "7",
       requiresOptional: [],
-      defaults: { rowsPerPage: 24, blockSize: null, cumulativeMode: "none", cumulativeAgg: "sum", showPartialBlockTotal: true },
+      defaults: { rowsPerPage: 24, blockSize: null, cumulativeMode: "none", cumulativeAgg: "sum", showPartialBlockTotal: true, showPageMarkers: true },
       columns: ["id", "budget", "shift", "dispense", "book", "serial", "name", "unit", "dispensed", "price", "dispensedValue", "group", "month", "received", "balance", "pharmacy", "pageNo", "actions"],
       printTotalField: null
     },
@@ -1247,7 +1284,7 @@ PH.config = (function () {
       order: 8,
       shortcut: "8",
       requiresOptional: [],
-      defaults: { rowsPerPage: 24, blockSize: null, cumulativeMode: "none", cumulativeAgg: "sum", showPartialBlockTotal: true },
+      defaults: { rowsPerPage: 24, blockSize: null, cumulativeMode: "none", cumulativeAgg: "sum", showPartialBlockTotal: true, showPageMarkers: true },
       columns: ["book", "serial", "name", "unit", "received", "dispensed", "price", "movingAvg", "valueOut", "negativeStock"],
       printTotalField: "valueOut"
     }
@@ -1902,6 +1939,8 @@ PH.settings = (function () {
         return CUMULATIVE_AGGS[value] ? value : defaults.cumulativeAgg;
       case "showPartialBlockTotal":
         return typeof value === "boolean" ? value : !!defaults.showPartialBlockTotal;
+      case "showPageMarkers":
+        return typeof value === "boolean" ? value : !!defaults.showPageMarkers;
       default:
         return value;
     }
@@ -3615,7 +3654,10 @@ PH.viewTable = (function () {
   var cfg = PH.config;
   var store = PH.store;
 
-  var ROW_H = 40;
+  var ROW_H = (function () {
+    var fromCss = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h"));
+    return Number.isFinite(fromCss) && fromCss > 0 ? fromCss : 40;
+  })();
   var BUFFER_ROWS = 12;
 
   function el(tag, attrs, children) {
@@ -3658,7 +3700,7 @@ PH.viewTable = (function () {
       rows: [],
       filterRows: opts.filterRows || [],
       scopeRowIds: opts.scopeRowIds || null,
-      rowKind: opts.rowKind || function () { return "data"; },
+      rowKind: opts.rowKind || function (row) { return row && row.__pageBreak ? "page-break" : "data"; },
       onCellEdit: opts.onCellEdit || null,
       onRowEdit: opts.onRowEdit || null,
       onRowDelete: opts.onRowDelete || null,
@@ -3896,6 +3938,16 @@ PH.viewTable = (function () {
         else if (opts.onRowDrilldown && row.sourceIds && row.sourceIds.length) {
           tr.title = "نقر مزدوج لعرض الصفوف المصدرية";
           tr.addEventListener("dblclick", function () { opts.onRowDrilldown(row.sourceIds); });
+        }
+
+        if (kind === "page-break") {
+          tr.className = "page-break-row";
+          var pbTd = el("td", { colspan: String(state.columns.length) }, [
+            el("span", { class: "page-break-row__caption" }, [text("نهاية الصفحة " + (row.__pageBreakPage || ""))])
+          ]);
+          tr.appendChild(pbTd);
+          tbody.appendChild(tr);
+          continue;
         }
 
         if (kind === "filler") {
@@ -4879,8 +4931,8 @@ PH.selftest = (function () {
 
   function runReportParity(source, expected) {
     var result = makeResult();
-    var movementSettings = { blockSize: 10, cumulativeMode: "block", showPartialBlockTotal: true };
-    var yiSettings = { blockSize: 24, cumulativeMode: "running", showPartialBlockTotal: true };
+    var movementSettings = { blockSize: 10, cumulativeMode: "block", showPartialBlockTotal: true, showPageMarkers: true };
+    var yiSettings = { blockSize: 24, cumulativeMode: "running", showPartialBlockTotal: true, showPageMarkers: true };
 
     var movement = reports.computeMovement(source, movementSettings);
     check(result, movement.grandTotal.toString() === expected.movement.grandTotal, "movement grand total parity");
@@ -4938,8 +4990,8 @@ PH.selftest = (function () {
   function runAverageInvariants(source) {
     var result = makeResult();
     var avgResult = avg.computeAveragePrices(source, { weightField: "dispensed" });
-    var movementResult = reports.computeMovement(source, { blockSize: 10, cumulativeMode: "block", showPartialBlockTotal: true });
-    var groupsResult = reports.computeGroups(source, { blockSize: 10, cumulativeMode: "block", showPartialBlockTotal: true });
+    var movementResult = reports.computeMovement(source, { blockSize: 10, cumulativeMode: "block", showPartialBlockTotal: true, showPageMarkers: true });
+    var groupsResult = reports.computeGroups(source, { blockSize: 10, cumulativeMode: "block", showPartialBlockTotal: true, showPageMarkers: true });
 
     // Round at the row, sum exactly: every report sums the same per-row
     // rounded values, so these must agree to the last scaled unit - zero
@@ -5438,6 +5490,14 @@ PH.app = (function () {
       }
 
       panel.appendChild(fieldWrap("عدد الصفوف في الصفحة", presetRow(cfg.ROWS_PER_PAGE_PRESETS, settings.rowsPerPage, function (v) { onChange("rowsPerPage", v); })));
+
+      if (repDef.printTotalField) {
+        var markerSwitch = el("div", { class: "switch", role: "switch", tabindex: "0", "aria-checked": settings.showPageMarkers !== false ? "true" : "false" }, [
+          el("span", { class: "switch__track" }), el("span", {}, [text("إظهار حدود الصفحات في الجدول")])
+        ]);
+        markerSwitch.addEventListener("click", function () { onChange("showPageMarkers", settings.showPageMarkers === false); });
+        panel.appendChild(markerSwitch);
+      }
 
       if (supportsBlocking) {
         var advancedOpen = state.settingsPanelAdvancedOpen === true;
@@ -6034,7 +6094,31 @@ PH.app = (function () {
     var countLabel = $("row-count-label");
     if (countLabel) countLabel.textContent = "عرض " + pipeline.resultCount + " من " + pipeline.totalCount;
 
+    var tableSettings = resolveSettings(repDef.id, sheetKeyFor(repDef.id, state.activeCombination));
+    if (repDef.printTotalField && tableSettings.showPageMarkers !== false && tableSettings.rowsPerPage > 0 && displayRows.length > 0) {
+      var withMarkers = [];
+      var pageNum = 1;
+      for (var mi = 0; mi < displayRows.length; mi++) {
+        withMarkers.push(displayRows[mi]);
+        if ((mi + 1) % tableSettings.rowsPerPage === 0 && mi !== displayRows.length - 1) {
+          withMarkers.push({ __pageBreak: true, __pageBreakPage: pageNum });
+          pageNum++;
+        }
+      }
+      displayRows = withMarkers;
+    }
+
     var scopeRowIds = store.getSourceRows().filter(function (row) { return filterActiveRows([row], state.activeCombination).length > 0; }).map(function (row) { return row.id; });
+
+    if (pipeline.resultCount === 0 && pipeline.totalCount > 0) {
+      if (tableController) { tableController.destroy(); tableController = null; tableControllerKey = null; tableControllerContainer = null; }
+      container.innerHTML = "";
+      container.appendChild(el("div", { class: "table-empty-state" }, [
+        el("div", { class: "fs-body", style: "font-weight:600;" }, [text("لا توجد نتائج مطابقة")]),
+        el("div", { class: "fs-caption text-soft" }, [text("جرّب تعديل الفلاتر أو مصطلح البحث.")])
+      ]));
+      return;
+    }
 
     // reportId + row count let two different scopes with the same row count
     // silently reuse each other's controller (and, worse, its stale
