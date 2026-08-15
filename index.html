@@ -5320,7 +5320,51 @@ PH.app = (function () {
   }
   function text(t) { return document.createTextNode(t === null || t === undefined ? "" : String(t)); }
   function $(id) { return document.getElementById(id); }
+  function getFocusableIn(container) {
+    var nodes = container.querySelectorAll('a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
+    return Array.prototype.slice.call(nodes).filter(function (e) { return e.offsetParent !== null; });
+  }
+
+  // Every overlay in the app (edit panel, command palette, import wizard,
+  // print preview, self-test panel, add-row form) builds its own overlay
+  // element with its own layout, but none of them trapped Tab inside
+  // themselves or returned focus to whatever opened them on close. This is
+  // the one place that behavior lives now - call it right after appending
+  // an overlay to the document, and every existing removeDialog(overlay)
+  // call site gets it for free.
+  function registerDialog(overlay, opts) {
+    opts = opts || {};
+    var triggerEl = document.activeElement;
+    document.body.appendChild(overlay);
+    document.body.classList.add("modal-open");
+
+    function onKeydown(e) {
+      if (e.key !== "Tab") return;
+      var focusable = getFocusableIn(overlay);
+      if (!focusable.length) return;
+      var first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    overlay.addEventListener("keydown", onKeydown);
+
+    var closed = false;
+    overlay.__dialogClose = function () {
+      if (closed) return;
+      closed = true;
+      overlay.removeEventListener("keydown", onKeydown);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (!document.querySelector('[role="dialog"]')) document.body.classList.remove("modal-open");
+      if (opts.onClose) opts.onClose();
+      if (triggerEl && typeof triggerEl.focus === "function" && document.body.contains(triggerEl)) triggerEl.focus();
+    };
+
+    var initial = opts.initialFocus || getFocusableIn(overlay)[0];
+    if (initial) initial.focus();
+  }
+
   function removeDialog(dialog) {
+    if (dialog && dialog.__dialogClose) { dialog.__dialogClose(); return; }
     if (dialog) dialog.remove();
     if (!document.querySelector('[role="dialog"]')) document.body.classList.remove("modal-open");
   }
@@ -5630,7 +5674,7 @@ PH.app = (function () {
   function renderReportTabs(container) {
     container.innerHTML = "";
     var rows = store.getSourceRows();
-    cfg.REPORTS.sort(function (a, b) { return a.order - b.order; }).forEach(function (rep) {
+    cfg.REPORTS.slice().sort(function (a, b) { return a.order - b.order; }).forEach(function (rep) {
       var disabled = rows.length > 0 && rep.requiresOptional.some(function (col) { return !rows.some(function (r) { return r[col] !== undefined && r[col] !== null; }); });
 
       var tab = el("div", {
@@ -5644,8 +5688,10 @@ PH.app = (function () {
         el("span", { class: "report-tab-h__shortcut" }, [text("Ctrl+" + rep.shortcut)])
       ]);
       if (!disabled) {
-        tab.addEventListener("click", function () { if (state.activeReportId !== rep.id) resetQueryState(); state.activeReportId = rep.id; render(); });
+        var activateTab = function () { if (state.activeReportId !== rep.id) resetQueryState(); state.activeReportId = rep.id; render(); };
+        tab.addEventListener("click", activateTab);
         tab.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateTab(); return; }
           if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
           e.preventDefault();
           var enabled = cfg.REPORTS.filter(function (item) { return !item.requiresOptional.some(function (col) { return rows.length > 0 && !rows.some(function (r) { return r[col] !== undefined && r[col] !== null; }); }); });
@@ -5964,7 +6010,7 @@ PH.app = (function () {
     var actions = el("div", { class: "row", style: "justify-content:flex-start;" });
     var saveBtn = el("button", { class: "btn btn--primary", type: "button" }, [text("حفظ التعديل")]);
     var cancelBtn = el("button", { class: "btn btn--secondary", type: "button" }, [text("إلغاء")]);
-    actions.appendChild(saveBtn); actions.appendChild(cancelBtn); panel.appendChild(actions); overlay.appendChild(panel); document.body.appendChild(overlay); document.body.classList.add("modal-open");
+    actions.appendChild(saveBtn); actions.appendChild(cancelBtn); panel.appendChild(actions); overlay.appendChild(panel); registerDialog(overlay);
     cancelBtn.addEventListener("click", function () { removeDialog(overlay); });
     saveBtn.addEventListener("click", function () {
       var next = Object.assign({}, original, { __raw: Object.assign({}, original.__raw || {}) });
@@ -6030,8 +6076,7 @@ PH.app = (function () {
     panel.appendChild(input);
     panel.appendChild(list);
     overlay.appendChild(panel);
-    document.body.appendChild(overlay);
-    document.body.classList.add("modal-open");
+    registerDialog(overlay);
 
     function renderList() {
       var q = norm.arabicNormalize(input.value || "");
@@ -6318,8 +6363,7 @@ PH.app = (function () {
     overlay.appendChild(headerBar);
     overlay.appendChild(body);
     overlay.appendChild(footer);
-    document.body.appendChild(overlay);
-    document.body.classList.add("modal-open");
+    registerDialog(overlay);
 
     cancelBtn.addEventListener("click", function () { removeDialog(overlay); });
 
@@ -6653,7 +6697,7 @@ PH.app = (function () {
       var target = e.target;
       if (e.key === "Escape") {
         var dialogs = document.querySelectorAll('[role="dialog"]');
-        if (dialogs.length) { e.preventDefault(); dialogs[dialogs.length - 1].remove(); if (dialogs.length === 1) document.body.classList.remove("modal-open"); return; }
+        if (dialogs.length) { e.preventDefault(); removeDialog(dialogs[dialogs.length - 1]); return; }
         if (overflowMenuOpen) { e.preventDefault(); closeOverflowMenu(); var t = $("btn-overflow-toggle"); if (t) t.focus(); return; }
       }
       var editable = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
@@ -6741,8 +6785,7 @@ PH.app = (function () {
     body.appendChild(calPanel);
     overlay.appendChild(toolbar);
     overlay.appendChild(body);
-    document.body.appendChild(overlay);
-    document.body.classList.add("modal-open");
+    registerDialog(overlay);
 
     function refreshPreview() {
       if (showingRuler) {
@@ -6885,8 +6928,7 @@ PH.app = (function () {
   function runSelfTestOverlay() {
     var overlay = el("div", { role: "dialog", "aria-modal": "true", "aria-label": "الفحص الذاتي", style: "position:fixed; inset:0; background:var(--paper); z-index:100; padding:var(--sp-6); overflow:auto;" });
     overlay.appendChild(el("div", { class: "fs-title" }, [text("فحص ذاتي — جارٍ التشغيل…")]));
-    document.body.appendChild(overlay);
-    document.body.classList.add("modal-open");
+    registerDialog(overlay);
     PH.selftest.runAll().then(function (result) {
       overlay.innerHTML = "";
       overlay.appendChild(el("div", { class: "fs-title" }, [text("نتائج الفحص الذاتي")]));
@@ -6949,8 +6991,7 @@ PH.app = (function () {
     PH.viewEntry.createGuidedForm(overlay, {
       onCommit: function () { showToast("تمت الإضافة"); }
     });
-    document.body.appendChild(overlay);
-    document.body.classList.add("modal-open");
+    registerDialog(overlay);
   }
 
   function downloadTemplate() {
