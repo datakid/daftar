@@ -2,11 +2,17 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
+<script>
+try {
+  var savedTheme = localStorage.getItem("daftar-theme");
+  if (savedTheme === "dark" || savedTheme === "light") document.documentElement.setAttribute("data-theme", savedTheme);
+} catch (e) {}
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>دفتر — تقارير الصيدلية</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5.5' fill='%231F6F5C'/%3E%3Crect x='5.25' y='4' width='14.5' height='16.5' rx='1.5' fill='none' stroke='%23F7FDFB' stroke-width='1.4'/%3E%3Cpath d='M8.25 4V20.5' stroke='%23F7FDFB' stroke-width='1.4'/%3E%3Cpath d='M11 8.75H15.25' stroke='%23F7FDFB' stroke-width='1.3' stroke-linecap='round'/%3E%3Cpath d='M11 11.75H15.25' stroke='%23F7FDFB' stroke-width='1.3' stroke-linecap='round'/%3E%3Cpath d='M11 14.75H13.5' stroke='%23F7FDFB' stroke-width='1.3' stroke-linecap='round'/%3E%3Cpath d='M14.5 4V8.25L16 7.1L17.5 8.25V4Z' fill='%23A8763E'/%3E%3C/svg%3E">
 
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&family=IBM+Plex+Sans+Arabic:wght@400;600&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
 
 <style>
 :root {
@@ -37,6 +43,7 @@
 
   --font-ui: "IBM Plex Sans Arabic", "Segoe UI", system-ui, sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: "Amiri", "IBM Plex Sans Arabic", serif;
 
   --fs-display: 22px;
   --fs-title: 16px;
@@ -135,7 +142,7 @@ table { border-collapse: collapse; width: 100%; }
 .page-cell--num { unicode-bidi: isolate; }
 
 .fs-display { font-size: var(--fs-display); font-weight: 600; }
-.fs-title { font-size: var(--fs-title); font-weight: 600; }
+.fs-title { font-size: var(--fs-title); font-weight: 600; font-family: var(--font-display); }
 .fs-body { font-size: var(--fs-body); font-weight: 400; }
 .fs-strong { font-size: var(--fs-body); font-weight: 600; }
 .fs-caption { font-size: var(--fs-caption); font-weight: 400; }
@@ -204,6 +211,7 @@ table { border-collapse: collapse; width: 100%; }
 .title-bar__name {
   font-size: var(--fs-title);
   font-weight: 600;
+  font-family: var(--font-display);
 }
 
 .title-bar__spacer { flex: 1; }
@@ -310,6 +318,7 @@ table { border-collapse: collapse; width: 100%; }
   padding: var(--sp-3) var(--sp-3);
   color: var(--text-soft);
   font-size: var(--fs-body);
+  font-family: var(--font-display);
   white-space: nowrap;
   border-bottom: 2px solid transparent;
 }
@@ -503,7 +512,7 @@ body.modal-open { overflow: hidden; }
   background: var(--paper-raised);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-mid);
-  box-shadow: 0 10px 28px rgba(30, 25, 15, .16);
+  box-shadow: var(--shadow-2);
   padding: var(--sp-1);
   z-index: 20;
 }
@@ -568,10 +577,10 @@ body.modal-open { overflow: hidden; }
   line-height: 1;
   padding: 2px 6px;
   border-radius: var(--r-round);
-  background: rgba(43, 42, 38, .08);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text-soft);
 }
-.pill[aria-pressed="true"] .pill__count { background: rgba(31, 111, 92, .16); color: var(--ink); }
+.pill[aria-pressed="true"] .pill__count { background: color-mix(in srgb, var(--ink) 16%, transparent); color: var(--ink); }
 
 .switch {
   display: inline-flex;
@@ -795,6 +804,8 @@ table.grid { table-layout: fixed; }
 
 .drop-zone svg { color: var(--ink); stroke-width: 1.5; }
 
+.drop-zone__headline { font-family: var(--font-display); font-size: var(--fs-title); }
+
 .panel-2 {
   background: var(--paper-raised);
   border: 1px solid var(--line);
@@ -953,7 +964,7 @@ table.grid { table-layout: fixed; }
 }
 
 .page-header { display: grid; grid-template-rows: 1fr 1fr; padding: 0 6mm; }
-.page-header__top { display: flex; align-items: center; justify-content: space-between; min-width: 0; }
+.page-header__top { display: flex; align-items: center; justify-content: space-between; min-width: 0; font-family: var(--font-display); }
 .page-header__columns { display: grid; align-items: center; border-top: 0.2mm solid #D8D3C6; font-size: 9pt; }
 .page-header__column { padding: 0 2mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .page-header__column--num { text-align: end; unicode-bidi: isolate; }
@@ -1245,8 +1256,8 @@ PH.config = (function () {
   var REPORTS_BY_ID = {};
   for (var r = 0; r < REPORTS.length; r++) REPORTS_BY_ID[REPORTS[r].id] = REPORTS[r];
 
-  var ROWS_PER_PAGE_PRESETS = [9, 10, 24];
-  var BLOCK_SIZE_PRESETS = [9, 10, 24];
+  var ROWS_PER_PAGE_PRESETS = [9, 10, 12, 16, 20, 24, 30];
+  var BLOCK_SIZE_PRESETS = [9, 10, 12, 16, 20, 24, 30, 40, 50];
 
   var COLUMN_LABELS = {
     name: "الاسم",
@@ -1697,6 +1708,17 @@ PH.store = (function () {
     return remove(STORES.settings, scope);
   }
 
+  function deleteSettingsFields(scope, fieldNames) {
+    return get(STORES.settings, scope).then(function (existing) {
+      if (!existing) return null;
+      var obj = existing;
+      var changed = false;
+      fieldNames.forEach(function (f) { if (f in obj) { delete obj[f]; changed = true; } });
+      if (!changed) return obj;
+      return put(STORES.settings, scope, obj);
+    });
+  }
+
   function isBlankCell(v) {
     if (v === null || v === undefined) return true;
     if (typeof v === "string" && v.trim() === "") return true;
@@ -1828,6 +1850,7 @@ PH.store = (function () {
     loadSettings: loadSettings,
     getAllSettingsScopes: getAllSettingsScopes,
     clearSettingsScope: clearSettingsScope,
+    deleteSettingsFields: deleteSettingsFields,
     saveCalibrationProfile: saveCalibrationProfile,
     loadCalibrationProfiles: loadCalibrationProfiles,
     fillBlanks: fillBlanks,
@@ -1842,6 +1865,48 @@ PH.settings = (function () {
   var cfg = PH.config;
   var store = PH.store;
 
+  var CUMULATIVE_MODES = { none: true, block: true, running: true };
+  var CUMULATIVE_AGGS = { sum: true, wmean: true };
+
+  function toNumberOrNaN(v) {
+    if (typeof v === "number") return v;
+    if (typeof v === "string" && v.trim() !== "") return Number(v);
+    return NaN;
+  }
+
+  // reportId-aware: the same field can mean different things (or nothing at
+  // all) on different reports, so there is no single global answer for
+  // "is this blockSize valid" - only "is it valid for THIS report".
+  function sanitize(reportId, field, value) {
+    var repDef = cfg.REPORTS_BY_ID[reportId];
+    var defaults = (repDef && repDef.defaults) || {};
+    switch (field) {
+      case "rowsPerPage": {
+        var n = toNumberOrNaN(value);
+        if (cfg.ROWS_PER_PAGE_PRESETS.indexOf(n) !== -1) return n;
+        return defaults.rowsPerPage;
+      }
+      case "blockSize": {
+        // A report that doesn't support blocking never gets a persisted
+        // blockSize, no matter what's sitting in storage - an old backup,
+        // a stray write from before this report existed, anything.
+        if (defaults.blockSize === null || defaults.blockSize === undefined) return null;
+        if (value === null) return null;
+        var b = toNumberOrNaN(value);
+        if (cfg.BLOCK_SIZE_PRESETS.indexOf(b) !== -1) return b;
+        return defaults.blockSize;
+      }
+      case "cumulativeMode":
+        return CUMULATIVE_MODES[value] ? value : defaults.cumulativeMode;
+      case "cumulativeAgg":
+        return CUMULATIVE_AGGS[value] ? value : defaults.cumulativeAgg;
+      case "showPartialBlockTotal":
+        return typeof value === "boolean" ? value : !!defaults.showPartialBlockTotal;
+      default:
+        return value;
+    }
+  }
+
   function resolve(reportId, sheetKey, overrides) {
     var base = cfg.REPORTS_BY_ID[reportId].defaults;
     var out = {};
@@ -1849,12 +1914,23 @@ PH.settings = (function () {
     var linked = overrides.linked && overrides.linked[reportId] !== false;
     out.linked = linked === undefined ? true : linked;
 
+    // Sheet-level overrides no longer exist: a setting changed while looking
+    // at one filtered slice used to silently apply only to that slice,
+    // which is why "rows per page doesn't work" was such a common report.
+    // Only the global and per-report layers remain.
     var g = overrides.global || {};
     Object.keys(g).forEach(function (k) { out[k] = g[k]; });
     var r = (overrides.report && overrides.report[reportId]) || {};
     Object.keys(r).forEach(function (k) { out[k] = r[k]; });
-    var s = (overrides.sheet && overrides.sheet[sheetKey]) || {};
-    Object.keys(s).forEach(function (k) { out[k] = s[k]; });
+
+    // Sanitize on resolve, not only on write: a value already sitting in
+    // storage from before this validation existed - an old backup, a
+    // manual DB edit, a bug in an earlier version - must not reach the app
+    // un-checked just because it was never re-saved through the new path.
+    Object.keys(out).forEach(function (k) {
+      if (k === "linked") return;
+      out[k] = sanitize(reportId, k, out[k]);
+    });
     return out;
   }
 
@@ -1892,6 +1968,7 @@ PH.settings = (function () {
 
   return {
     resolve: resolve,
+    sanitize: sanitize,
     applyLinkedChange: applyLinkedChange,
     isDivergent: isDivergent,
     estimatedPageCount: estimatedPageCount,
@@ -3502,11 +3579,17 @@ PH.paginate = (function () {
     };
   }
 
+  var MIN_ROW_MM = 4;
+
   function assertGeometry(geo) {
-    var g = computeRowMm(geo);
     var errors = [];
+    if (!Number.isFinite(geo.rowsPerPage) || geo.rowsPerPage <= 0 || Math.floor(geo.rowsPerPage) !== geo.rowsPerPage) {
+      errors.push("rowsPerPage must be a positive whole number: " + geo.rowsPerPage);
+    }
+    var g = computeRowMm(geo);
     if (g.tracksMm > g.pageHeightMm + 0.5) errors.push("tracks exceed page height: " + g.tracksMm + " > " + g.pageHeightMm);
     if (g.rowMm <= 0) errors.push("rowMm is non-positive: " + g.rowMm);
+    else if (g.rowMm < MIN_ROW_MM) errors.push("row height too small to print legibly: " + g.rowMm.toFixed(2) + "mm < " + MIN_ROW_MM + "mm");
     return { ok: errors.length === 0, errors: errors, geometry: g };
   }
 
@@ -5211,12 +5294,27 @@ PH.app = (function () {
   }
 
   function applySettingChange(scopeName, scopeKey, fields) {
+    var sanitized = {};
+    if (scopeName === "report") {
+      for (var k in fields) sanitized[k] = PH.settings.sanitize(scopeKey, k, fields[k]);
+    } else if (scopeName === "global" && "rowsPerPage" in fields) {
+      sanitized.rowsPerPage = cfg.ROWS_PER_PAGE_PRESETS.indexOf(fields.rowsPerPage) !== -1 ? fields.rowsPerPage : cfg.ROWS_PER_PAGE_PRESETS[0];
+    } else {
+      sanitized = fields;
+    }
+
+    if (scopeName === "global") {
+      var globalBucket = state.settingsOverrides.global;
+      for (var gk in sanitized) globalBucket[gk] = sanitized[gk];
+      state.settingsVersion++;
+      return store.saveSettingsMulti("global", sanitized);
+    }
+
     var bucket = state.settingsOverrides[scopeName];
     if (!bucket[scopeKey]) bucket[scopeKey] = {};
-    for (var k in fields) bucket[scopeKey][k] = fields[k];
+    for (var k2 in sanitized) bucket[scopeKey][k2] = sanitized[k2];
     state.settingsVersion++;
-    var dbScope = scopeName === "global" ? "global" : scopeName + ":" + scopeKey;
-    return store.saveSettingsMulti(dbScope, fields);
+    return store.saveSettingsMulti(scopeName + ":" + scopeKey, sanitized);
   }
 
   function applyLinkedSettingChange(reportId, value) {
@@ -5226,10 +5324,39 @@ PH.app = (function () {
   }
 
   function resetSettingsScope(scopeName, scopeKey) {
+    if (scopeName === "global") {
+      state.settingsOverrides.global = {};
+      state.settingsVersion++;
+      return store.clearSettingsScope("global");
+    }
     state.settingsOverrides[scopeName][scopeKey] = {};
     state.settingsVersion++;
-    var dbScope = scopeName === "global" ? "global" : scopeName + ":" + scopeKey;
-    return store.clearSettingsScope(dbScope);
+    return store.clearSettingsScope(scopeName + ":" + scopeKey);
+  }
+
+  // A.2's "apply to all reports" action: only rowsPerPage is safe to promote
+  // to the global bucket. blockSize/cumulativeMode/cumulativeAgg are
+  // per-report-shaped (several reports don't support blocking at all -
+  // defaults.blockSize === null - and writing a blockSize onto them is
+  // exactly the write sanitize() exists to refuse), so they stay
+  // report-specific even from this action.
+  var GLOBAL_SETTING_FIELDS = ["rowsPerPage"];
+
+  function applyRowsPerPageToAllReports(rowsPerPage) {
+    var fields = {};
+    GLOBAL_SETTING_FIELDS.forEach(function (f) { if (f === "rowsPerPage") fields.rowsPerPage = rowsPerPage; });
+    return applySettingChange("global", null, fields).then(function () {
+      var clears = [];
+      Object.keys(cfg.REPORTS_BY_ID).forEach(function (rid) {
+        var bucket = state.settingsOverrides.report[rid];
+        if (!bucket) return;
+        var hadAny = false;
+        GLOBAL_SETTING_FIELDS.forEach(function (f) { if (f in bucket) { delete bucket[f]; hadAny = true; } });
+        if (hadAny) clears.push(store.deleteSettingsFields("report:" + rid, GLOBAL_SETTING_FIELDS));
+      });
+      state.settingsVersion++;
+      return Promise.all(clears);
+    });
   }
 
   function fieldWrap(labelText, controlEl) {
@@ -5244,18 +5371,8 @@ PH.app = (function () {
       btn.addEventListener("click", function () { if (!disabled) onPick(p); });
       row.appendChild(btn);
     });
-    var customInput = el("input", { class: "input", type: "number", min: "1", max: "500", style: "width:72px;", placeholder: "مخصص" });
-    if (presets.indexOf(currentValue) === -1 && currentValue !== null && currentValue !== undefined) customInput.value = currentValue;
-    if (disabled) customInput.disabled = true;
-    customInput.addEventListener("change", function () {
-      var v = parseInt(customInput.value, 10);
-      if (!disabled && v > 0) onPick(v);
-    });
-    row.appendChild(customInput);
     return row;
   }
-
-  var settingsPanelScopeMode = "sheet";
 
   function toggleSettingsPanel(anchorEl, containerEl) {
     var existing = containerEl.querySelector(".settings-panel-open");
@@ -5270,60 +5387,79 @@ PH.app = (function () {
     var panel = el("div", { class: "panel-2 settings-panel-open", style: "position:absolute; z-index:30; width:300px; display:flex; flex-direction:column; gap:var(--sp-3); top:44px; inset-inline-end:8px;" });
     panel.addEventListener("click", function (e) { e.stopPropagation(); });
 
-    function currentScopeKey() { return settingsPanelScopeMode === "sheet" ? sheetKey : reportId; }
+    function reopen() {
+      var reopened = document.getElementById("btn-sheet-settings");
+      if (reopened) toggleSettingsPanel(reopened, reopened.parentElement);
+    }
+
+    function checkPrintGeometry(rowsPerPage) {
+      var base = { rowsPerPage: rowsPerPage };
+      var portrait = PH.paginate.assertGeometry(Object.assign({}, PH.print.DEFAULT_GEO, base, { orientation: "portrait" }));
+      if (!portrait.ok) return portrait;
+      return PH.paginate.assertGeometry(Object.assign({}, PH.print.DEFAULT_GEO, base, { orientation: "landscape" }));
+    }
 
     function onChange(field, value) {
       var settings = resolveSettings(reportId, sheetKey);
-      var scopeKey = currentScopeKey();
       var fields;
       if (field === "rowsPerPage" || field === "blockSize") {
+        if (field === "rowsPerPage") {
+          var geoCheck = checkPrintGeometry(value);
+          if (!geoCheck.ok) { showToast("عدد الصفوف هذا كبير جدًا ليُطبع بوضوح على الصفحة", false); return; }
+        }
         var next = PH.settings.applyLinkedChange(settings, field, value);
         fields = { rowsPerPage: next.rowsPerPage };
-        if (next.blockSize !== null && next.blockSize !== undefined) fields.blockSize = next.blockSize;
+        if (supportsBlocking && next.blockSize !== null && next.blockSize !== undefined) fields.blockSize = next.blockSize;
       } else {
         fields = {};
         fields[field] = value;
       }
-      applySettingChange(settingsPanelScopeMode, scopeKey, fields);
+      applySettingChange("report", reportId, fields);
       render();
-      var reopened = document.getElementById("btn-sheet-settings");
-      if (reopened) toggleSettingsPanel(reopened, reopened.parentElement);
+      reopen();
+    }
+
+    function onApplyToAllReports() {
+      var settings = resolveSettings(reportId, sheetKey);
+      applyRowsPerPageToAllReports(settings.rowsPerPage).then(function () {
+        render();
+        showToast("تم تطبيق عدد الصفوف على كل التقارير");
+        reopen();
+      });
     }
 
     function refreshPanel() {
       panel.innerHTML = "";
       var settings = resolveSettings(reportId, sheetKey);
-      var rows = store.getSourceRows();
-      var scoped = filterActiveRows(rows, combination);
 
       panel.appendChild(el("div", { class: "fs-body", style: "font-weight:600;" }, [text("إعدادات — " + repDef.label)]));
-      if (state.settingsOverrides.sheet && state.settingsOverrides.sheet[sheetKey] && Object.keys(state.settingsOverrides.sheet[sheetKey]).length) {
-        panel.appendChild(el("div", { class: "fs-caption", style: "color:var(--brass);" }, [text("هذه الصفحة تتجاوز بعض إعدادات التقرير العامة.")]));
+      if (state.settingsOverrides.report[reportId] && Object.keys(state.settingsOverrides.report[reportId]).length) {
+        panel.appendChild(el("div", { class: "fs-caption", style: "color:var(--brass);" }, [text("هذا التقرير يتجاوز الإعدادات العامة.")]));
       }
-
-      var scopeRow = el("div", { class: "row", style: "gap:var(--sp-1);" });
-      [["sheet", "هذه الصفحة"], ["report", "كل صفحات التقرير"]].forEach(function (pair) {
-        var btn = el("button", { class: "pill", type: "button", "aria-pressed": settingsPanelScopeMode === pair[0] ? "true" : "false" }, [text(pair[1])]);
-        btn.addEventListener("click", function () { settingsPanelScopeMode = pair[0]; refreshPanel(); });
-        scopeRow.appendChild(btn);
-      });
-      panel.appendChild(fieldWrap("عند التغيير، طبّق على", scopeRow));
 
       panel.appendChild(fieldWrap("عدد الصفوف في الصفحة", presetRow(cfg.ROWS_PER_PAGE_PRESETS, settings.rowsPerPage, function (v) { onChange("rowsPerPage", v); })));
 
       if (supportsBlocking) {
-        var linkedSwitch = el("div", { class: "switch", role: "switch", tabindex: "0", "aria-checked": settings.linked !== false ? "true" : "false" }, [
-          el("span", { class: "switch__track" }), el("span", {}, [text("ربط حجم الكتلة بحجم الصفحة")])
-        ]);
-        linkedSwitch.addEventListener("click", function () {
-          applyLinkedSettingChange(reportId, settings.linked === false);
-          render();
-          var reopened2 = document.getElementById("btn-sheet-settings");
-          if (reopened2) toggleSettingsPanel(reopened2, reopened2.parentElement);
-        });
-        panel.appendChild(linkedSwitch);
+        var advancedOpen = state.settingsPanelAdvancedOpen === true;
+        var advancedBtn = el("button", { class: "btn btn--tertiary", type: "button", style: "align-self:flex-start;" }, [text((advancedOpen ? "▾ " : "◂ ") + "إعدادات متقدمة")]);
+        advancedBtn.addEventListener("click", function () { state.settingsPanelAdvancedOpen = !advancedOpen; refreshPanel(); });
+        panel.appendChild(advancedBtn);
 
-        panel.appendChild(fieldWrap("حجم الكتلة", presetRow(cfg.BLOCK_SIZE_PRESETS, settings.blockSize, function (v) { onChange("blockSize", v); }, settings.linked !== false)));
+        if (advancedOpen) {
+          var divergeSwitch = el("div", { class: "switch", role: "switch", tabindex: "0", "aria-checked": settings.linked === false ? "true" : "false" }, [
+            el("span", { class: "switch__track" }), el("span", {}, [text("استخدم حجم كتلة مختلف عن حجم الصفحة")])
+          ]);
+          divergeSwitch.addEventListener("click", function () {
+            applyLinkedSettingChange(reportId, settings.linked === false);
+            render();
+            reopen();
+          });
+          panel.appendChild(divergeSwitch);
+
+          if (settings.linked === false) {
+            panel.appendChild(fieldWrap("حجم الكتلة", presetRow(cfg.BLOCK_SIZE_PRESETS, settings.blockSize, function (v) { onChange("blockSize", v); })));
+          }
+        }
 
         if (PH.settings.isDivergent(settings)) {
           panel.appendChild(el("div", { class: "fs-caption", style: "color:var(--brass);" }, [text("حجم الكتلة يختلف عن عدد صفوف الصفحة.")]));
@@ -5346,18 +5482,21 @@ PH.app = (function () {
         }
       }
 
-      var pageCount = PH.settings.estimatedPageCount(scoped.length, settings.rowsPerPage);
+      var pageCount = PH.settings.estimatedPageCount(computeSheetFor(reportId, combination).rows.length, settings.rowsPerPage);
       panel.appendChild(el("div", { class: "fs-caption text-soft" }, [text("~" + pageCount + " صفحة عند الطباعة")]));
 
-      var resetBtn = el("button", { class: "btn btn--tertiary" }, [text("إعادة ضبط هذا النطاق للافتراضي")]);
+      var resetBtn = el("button", { class: "btn btn--tertiary" }, [text("إعادة ضبط هذا التقرير للافتراضي")]);
       resetBtn.addEventListener("click", function () {
-        resetSettingsScope(settingsPanelScopeMode, currentScopeKey()).then(function () {
+        resetSettingsScope("report", reportId).then(function () {
           render();
-          var reopened3 = document.getElementById("btn-sheet-settings");
-          if (reopened3) toggleSettingsPanel(reopened3, reopened3.parentElement);
+          reopen();
         });
       });
       panel.appendChild(resetBtn);
+
+      var applyAllBtn = el("button", { class: "btn btn--tertiary" }, [text("طبّق عدد الصفوف على كل التقارير")]);
+      applyAllBtn.addEventListener("click", onApplyToAllReports);
+      panel.appendChild(applyAllBtn);
     }
 
     refreshPanel();
@@ -5991,7 +6130,7 @@ PH.app = (function () {
   function renderEmptyState() {
     var wrap = el("div", { class: "stack", style: "align-items:center; padding-top:60px;" });
     var dz = el("div", { class: "drop-zone", style: "width:480px;" }, [
-      el("div", {}, [text("اسحب ملف Excel أو CSV هنا، أو اضغط للاختيار")]),
+      el("div", { class: "drop-zone__headline" }, [text("اسحب ملف Excel أو CSV هنا، أو اضغط للاختيار")]),
       el("div", { class: "fs-caption" }, [text("يدعم .xlsx .xls .xlsm .csv — أو الصق نطاقًا من Excel بـ Ctrl+V")])
     ]);
     var fileInput = el("input", { type: "file", accept: ".xlsx,.xls,.xlsm,.csv", style: "display:none;" });
@@ -6686,8 +6825,8 @@ PH.app = (function () {
       var scopes = results[1];
       state.settingsOverrides.global = scopes.global;
       state.settingsOverrides.report = scopes.report;
-      state.settingsOverrides.sheet = scopes.sheet;
       state.settingsOverrides.linked = scopes.linked;
+      migrateSheetScopeSettings(scopes.sheet);
       render();
     }).catch(function () {
       render();
@@ -6705,6 +6844,17 @@ PH.app = (function () {
     document.addEventListener("ph-import-file", function (e) { startImportFlow(e.detail); });
     document.getElementById("btn-add").addEventListener("click", openGuidedFormOverlay);
     if (/[?&]selftest=1/.test(window.location.search)) runSelfTestOverlay();
+  }
+
+  function migrateSheetScopeSettings(sheetScope) {
+    // Sheet-level settings overrides have been removed - a setting changed
+    // while looking at one filtered slice used to silently apply only to
+    // that slice, which was the single most common "rows per page doesn't
+    // work" complaint. Clean up any leftover sheet:* records from before
+    // this shipped; resolve() already ignores them either way.
+    var sheetKeys = Object.keys(sheetScope || {});
+    var clears = sheetKeys.map(function (k) { return store.clearSettingsScope("sheet:" + k); });
+    return Promise.all(clears).then(function () { return store.saveSettings("meta", "migratedSettings", 2); }).catch(function () {});
   }
 
   function openGuidedFormOverlay() {
@@ -6757,7 +6907,30 @@ PH.app = (function () {
         if (!payload || payload.format !== "daftar-workspace" || !Array.isArray(payload.rows)) throw new Error("صيغة نسخة غير معروفة");
         if (!window.confirm("سيؤدي الاستعادة إلى استبدال البيانات الحالية. هل تريد المتابعة؟")) return;
         store.setSourceRows(payload.rows, "استعادة نسخة احتياطية", true);
-        if (payload.settingsOverrides) { state.settingsOverrides = Object.assign({ global: {}, report: {}, sheet: {}, linked: {} }, payload.settingsOverrides); state.settingsVersion++; }
+        if (payload.settingsOverrides) {
+          var restored = payload.settingsOverrides || {};
+          var sanitizedGlobal = {};
+          if (restored.global && "rowsPerPage" in restored.global) {
+            sanitizedGlobal.rowsPerPage = cfg.ROWS_PER_PAGE_PRESETS.indexOf(restored.global.rowsPerPage) !== -1 ? restored.global.rowsPerPage : cfg.ROWS_PER_PAGE_PRESETS[0];
+          }
+          var sanitizedReport = {};
+          Object.keys(restored.report || {}).forEach(function (rid) {
+            if (!cfg.REPORTS_BY_ID[rid]) return;
+            var bucket = restored.report[rid] || {};
+            var clean = {};
+            Object.keys(bucket).forEach(function (k) { clean[k] = PH.settings.sanitize(rid, k, bucket[k]); });
+            sanitizedReport[rid] = clean;
+          });
+          // Sheet-level overrides no longer exist; an old backup carrying
+          // sheet:* data is intentionally dropped here, not carried forward.
+          state.settingsOverrides = { global: sanitizedGlobal, report: sanitizedReport, sheet: {}, linked: restored.linked || {} };
+          state.settingsVersion++;
+
+          var writes = [store.saveSettingsMulti("global", sanitizedGlobal)];
+          Object.keys(sanitizedReport).forEach(function (rid) { writes.push(store.saveSettingsMulti("report:" + rid, sanitizedReport[rid])); });
+          writes.push(store.saveSettings("meta", "linked", state.settingsOverrides.linked));
+          Promise.all(writes).catch(function () {});
+        }
         if (payload.activeMonth !== undefined) state.activeMonth = payload.activeMonth;
         if (payload.activeReportId && cfg.REPORTS_BY_ID[payload.activeReportId]) state.activeReportId = payload.activeReportId;
         if (payload.dimensionGroups) state.dimensionGroups = payload.dimensionGroups;
@@ -6836,11 +7009,6 @@ document.getElementById("btn-import").addEventListener("click", function () {
   });
   input.click();
 });
-
-try {
-  var savedTheme = localStorage.getItem("daftar-theme");
-  if (savedTheme === "dark" || savedTheme === "light") document.documentElement.setAttribute("data-theme", savedTheme);
-} catch (e) {}
 
 </script>
 </body>
