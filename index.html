@@ -791,6 +791,22 @@ table.grid { table-layout: fixed; }
   z-index: 100;
 }
 
+.save-error-banner {
+  position: fixed;
+  top: 0;
+  inset-inline: 0;
+  z-index: 110;
+  background: var(--warn-wash);
+  color: var(--warn);
+  padding: var(--sp-2) var(--sp-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-body);
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+}
+
 .toast {
   display: flex;
   align-items: center;
@@ -1150,6 +1166,8 @@ table.grid { table-layout: fixed; }
     <div class="main__content" id="main-content" role="tabpanel" tabindex="0"></div>
   </div>
 </div>
+
+<div class="save-error-banner" id="save-error-banner" role="alert" style="display:none;"></div>
 
 <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
 
@@ -1533,10 +1551,12 @@ PH.store = (function () {
 
   var dbPromise = null;
 
+  var dbUnavailable = false;
+
   function openDb() {
     if (dbPromise) return dbPromise;
     dbPromise = new Promise(function (resolve, reject) {
-      if (typeof indexedDB === "undefined") { resolve(null); return; }
+      if (typeof indexedDB === "undefined") { dbUnavailable = true; resolve(null); return; }
       var req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = function (e) {
         var db = e.target.result;
@@ -1545,10 +1565,12 @@ PH.store = (function () {
         });
       };
       req.onsuccess = function (e) { resolve(e.target.result); };
-      req.onerror = function () { resolve(null); };
+      req.onerror = function () { dbUnavailable = true; resolve(null); };
     });
     return dbPromise;
   }
+
+  function isDbUnavailable() { return dbUnavailable; }
 
   function put(storeName, key, value) {
     return openDb().then(function (db) {
@@ -1693,7 +1715,10 @@ PH.store = (function () {
   function getRowsVersion() { return rowsVersion; }
 
   function loadPersisted() {
-    return get(STORES.sourceRows, "current").then(function (rows) {
+    return openDb().then(function () {
+      if (dbUnavailable) { saveState = "error"; notify({ type: "save-state", state: "error" }); }
+      return get(STORES.sourceRows, "current");
+    }).then(function (rows) {
       if (rows) {
         currentSourceRows = rows.map(function (row, index) {
           if (row && row.id) return row;
@@ -1882,6 +1907,7 @@ PH.store = (function () {
     redo: redo,
     onChange: onChange,
     getSaveState: getSaveState,
+    isDbUnavailable: isDbUnavailable,
     getRowsVersion: getRowsVersion,
     loadPersisted: loadPersisted,
     saveSettings: saveSettings,
@@ -4486,6 +4512,14 @@ PH.print = (function () {
     var orientation = opts.orientation || "portrait";
     var geometry = paginate.computeRowMm(Object.assign({ rowsPerPage: rowsPerPage, orientation: orientation }, calibratedGeo));
     var pagesResult = paginate.buildPagesFromBlocked(blockedRows, rowsPerPage);
+    if (pagesResult.pages.length > 200) {
+      var proceed = window.confirm("هذا التقرير يحتوي على " + pagesResult.pages.length + " صفحة، وقد يستغرق عرضها وقتًا طويلاً. هل تريد المتابعة؟");
+      if (!proceed) {
+        container.innerHTML = "";
+        container.appendChild(el("div", { class: "print-preview-page", style: "padding:var(--sp-6); text-align:center;" }, [text("تم إلغاء المعاينة (" + pagesResult.pages.length + " صفحة).")]));
+        return { pageCount: pagesResult.pages.length, cancelled: true };
+      }
+    }
     // Which field (if any) the totals band should sum for THIS report. Reports
     // without a genuine bigint money total (e.g. الرصيد, a quantity-only report)
     // pass printTotalField: null, which suppresses the band entirely instead of
@@ -6730,6 +6764,22 @@ PH.app = (function () {
       saveEl.textContent = s === "saved" ? "تم الحفظ" : (s === "pending" ? "جارِ الحفظ…" : (s === "error" ? "تعذّر الحفظ — صدّر نسخة احتياطية" : ""));
       saveEl.style.color = s === "error" ? "var(--err)" : "";
     }
+    updateSaveErrorBanner();
+  }
+
+  function updateSaveErrorBanner() {
+    var banner = $("save-error-banner");
+    if (!banner) return;
+    if (store.getSaveState() !== "error") { banner.style.display = "none"; return; }
+    banner.innerHTML = "";
+    var msg = store.isDbUnavailable()
+      ? "التخزين المحلي غير متاح — البيانات لن تُحفظ عند إغلاق الصفحة. صدّر نسخة احتياطية قبل الإغلاق"
+      : "تعذّر حفظ آخر التعديلات — صدّر نسخة احتياطية قبل إغلاق الصفحة";
+    banner.appendChild(text(msg));
+    var exportBtn = el("button", { class: "btn btn--secondary" }, [text("تصدير نسخة احتياطية")]);
+    exportBtn.addEventListener("click", exportWorkspaceBackup);
+    banner.appendChild(exportBtn);
+    banner.style.display = "flex";
   }
 
   function render() {
@@ -7040,6 +7090,9 @@ PH.app = (function () {
     });
     document.addEventListener("ph-import-file", function (e) { startImportFlow(e.detail); });
     document.getElementById("btn-add").addEventListener("click", openGuidedFormOverlay);
+    window.addEventListener("beforeunload", function (e) {
+      if (store.getSaveState() !== "saved") { e.preventDefault(); e.returnValue = ""; }
+    });
     if (/[?&]selftest=1/.test(window.location.search)) runSelfTestOverlay();
   }
 
