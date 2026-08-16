@@ -2335,7 +2335,7 @@ PH.reports = (function () {
       out.name = row.name;
       out.unit = row.unit;
       out.dispensed = row.dispensed;
-      out.price = row.price;
+      out.price = toScaledPriceBig(row.price);
       out.value = scaleValueOf(row.dispensed, row.price);
       out.sourceIds = row.id ? [row.id] : [];
       return out;
@@ -2401,7 +2401,7 @@ PH.reports = (function () {
       return {
         name: g.display.name,
         unit: g.display.unit,
-        price: price,
+        price: priceS,
         balance: Number(balanceSumS) / cfg.SCALE_QTY,
         value: valueSum,
         __book: g.firstRow.book,
@@ -2415,7 +2415,7 @@ PH.reports = (function () {
     var comparators = [textAsc("__book")];
     if (hasPageNo) comparators.push(numAsc("__pageNo"));
     comparators.push(textAsc("name"));
-    comparators.push(numDesc("price"));
+    comparators.push(function (a, b) { return a.price < b.price ? 1 : (a.price > b.price ? -1 : 0); });
 
     var sorted = stableSortBy(grouped, comparators);
 
