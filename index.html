@@ -1772,10 +1772,12 @@ PH.store = (function () {
 
     var indices;
     if (scopeRowIds) {
+      var idToIndex = new Map();
+      for (var bi = 0; bi < rows.length; bi++) { if (rows[bi] && rows[bi].id !== undefined) idToIndex.set(rows[bi].id, bi); }
       indices = scopeRowIds.map(function (value) {
         if (typeof value === "number") return value;
-        for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) if (rows[rowIndex] && rows[rowIndex].id === value) return rowIndex;
-        return -1;
+        var found = idToIndex.get(value);
+        return found === undefined ? -1 : found;
       }).filter(function (index) { return index >= 0; });
     } else {
       indices = [];
@@ -2726,7 +2728,7 @@ PH.query = (function () {
       });
     });
     scored.sort(function (a, b) { return a.dist - b.dist; });
-    var seen = {};
+    var seen = Object.create(null);
     var out = [];
     for (var i = 0; i < scored.length && out.length < (limit || 3); i++) {
       if (!seen[scored[i].value]) { seen[scored[i].value] = true; out.push(scored[i].value); }
@@ -3221,7 +3223,7 @@ PH.importer = (function () {
     for (var r = 0; r < dataRows.length; r++) {
       var cells = dataRows[r];
       if (isRowEmpty(cells)) continue;
-      var row = { __raw: {} };
+      var row = { __raw: {}, __sheetRow: headerRowIndex + 1 + r };
       colIndexes.forEach(function (c) {
         var fieldKey = mapping[c];
         if (!fieldKey) return;
@@ -3248,9 +3250,10 @@ PH.importer = (function () {
       var fieldKey = mapping[colIdx];
       if (!fieldKey || QUANTITY_FIELDS[fieldKey]) return;
       var blankCells = m.e.r - m.s.r;
-      if (!suggestions[colIdx]) suggestions[colIdx] = { fieldKey: fieldKey, blankCells: 0, ranges: 0 };
+      if (!suggestions[colIdx]) suggestions[colIdx] = { fieldKey: fieldKey, blankCells: 0, ranges: 0, rowRanges: [] };
       suggestions[colIdx].blankCells += blankCells;
       suggestions[colIdx].ranges += 1;
+      suggestions[colIdx].rowRanges.push({ startRow: m.s.r, endRow: m.e.r });
     });
     return suggestions;
   }
@@ -3709,7 +3712,8 @@ PH.viewTable = (function () {
       quantityColumns: opts.quantityColumns || [],
       scrollTop: 0,
       selection: null,
-      activeFillMenu: null
+      activeFillMenu: null,
+      activeFilterMenu: null
     };
 
     var root = el("div", { class: "table-wrap" });
@@ -3786,11 +3790,10 @@ PH.viewTable = (function () {
 
     function toggleFilterMenu(column, anchorEl) {
       closeFillMenu();
-      var existing = root.querySelector(".filter-menu-open");
-      if (existing) existing.remove();
+      closeFilterMenu();
 
       var uniqueValues = [];
-      var seen = {};
+      var seen = Object.create(null);
       (state.filterRows.length ? state.filterRows : state.rows).forEach(function (row) {
         var v = row[column];
         if (v === null || v === undefined || v === "") return;
@@ -3832,8 +3835,18 @@ PH.viewTable = (function () {
       });
 
       root.appendChild(menu);
-      function onClickAway(e) { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener("click", onClickAway); } }
+      state.activeFilterMenu = menu;
+      function onClickAway(e) { if (!menu.contains(e.target)) closeFilterMenu(); }
       setTimeout(function () { document.addEventListener("click", onClickAway); }, 0);
+      menu.__cleanup = function () { document.removeEventListener("click", onClickAway); };
+    }
+
+    function closeFilterMenu() {
+      if (state.activeFilterMenu) {
+        if (state.activeFilterMenu.__cleanup) state.activeFilterMenu.__cleanup();
+        state.activeFilterMenu.remove();
+        state.activeFilterMenu = null;
+      }
     }
 
     var tbody = el("tbody");
@@ -3849,6 +3862,7 @@ PH.viewTable = (function () {
 
     function toggleFillMenu(column, anchorEl) {
       closeFillMenu();
+      closeFilterMenu();
       var isQuantity = state.quantityColumns.indexOf(column) !== -1;
       var menu = el("div", { class: "panel-2 fill-menu", style: "position:absolute; z-index:20;" });
       var rect = anchorEl.getBoundingClientRect();
@@ -4040,6 +4054,7 @@ PH.viewTable = (function () {
       renderWindow: renderWindow,
       destroy: function () {
         closeFillMenu();
+        closeFilterMenu();
         container.removeEventListener("keydown", handleFillShortcut);
       }
     };
@@ -4090,7 +4105,7 @@ PH.viewEntry = (function () {
   function autocompleteNames(rows, queryText) {
     if (!queryText) return [];
     var q = norm.arabicNormalize(queryText);
-    var seen = {};
+    var seen = Object.create(null);
     var out = [];
     rows.forEach(function (r) {
       if (!r.name || seen[r.name]) return;
@@ -4162,7 +4177,7 @@ PH.viewEntry = (function () {
   }
 
   function createGuidedForm(container, opts) {
-    var state = { budget: null, shift: null, dispense: null, name: "", unit: "", price: null, group: "", book: "", serial: null, dispensed: null, received: 0 };
+    var state = { budget: null, shift: null, dispense: null, name: "", unit: "", price: null, group: "", book: "", serial: null, dispensed: null, received: 0, month: (opts && opts.defaultMonth) || "" };
 
     var root = el("div", { class: "panel-2 stack", style: "width:360px;" });
 
@@ -4204,6 +4219,10 @@ PH.viewEntry = (function () {
 
     var bookInput = el("input", { class: "input", placeholder: "دفتر" });
     var serialInput = el("input", { class: "input", placeholder: "الرقم", readonly: "readonly" });
+    var monthInput = el("input", { class: "input", placeholder: "الشهر (مثال: 2026-01)" });
+    monthInput.value = state.month;
+    monthInput.addEventListener("input", function () { state.month = monthInput.value; });
+    root.appendChild(el("div", { class: "field" }, [el("label", {}, [text("الشهر")]), monthInput]));
     root.appendChild(el("div", { class: "field" }, [el("label", {}, [text("دفتر")]), bookInput]));
     root.appendChild(el("div", { class: "field" }, [el("label", {}, [text("الرقم")]), serialInput]));
 
@@ -4273,6 +4292,7 @@ PH.viewEntry = (function () {
         book: bookInput.value, serial: norm.parseInteger(serialInput.value),
         dispensed: norm.parseNumber(dispensedInput.value),
         received: norm.parseNumber(receivedInput.value) || 0,
+        month: state.month || undefined,
         __raw: {}
       };
       var rows = store.getSourceRows();
@@ -4337,13 +4357,18 @@ PH.print = (function () {
   }
 
   var measureCache = {};
+  var measureCacheSize = 0;
+  var MEASURE_CACHE_LIMIT = 5000;
   function cachedMeasure(ctx, str, columnWidth, fontPx) {
     var key = str + "|" + columnWidth + "|" + fontPx;
     if (measureCache[key] !== undefined) return measureCache[key];
+    if (measureCacheSize >= MEASURE_CACHE_LIMIT) { measureCache = {}; measureCacheSize = 0; }
     var w = measureTextWidth(ctx, str, fontPx);
     measureCache[key] = w;
+    measureCacheSize++;
     return w;
   }
+  function clearMeasureCache() { measureCache = {}; measureCacheSize = 0; }
 
   function buildPageElement(pageData, geo, columns, reportLabel, orientation, marginsMm) {
     var isLandscape = orientation === "landscape";
@@ -4497,7 +4522,10 @@ PH.print = (function () {
     return pagesResult;
   }
 
+  var printJobToken = 0;
+
   function runPrintJob(blockedRows, opts) {
+    var jobToken = ++printJobToken;
     var printRoot = document.getElementById("print-root");
     if (!printRoot) {
       printRoot = el("div", { id: "print-root" });
@@ -4538,6 +4566,7 @@ PH.print = (function () {
     var previousTitle = document.title;
     document.title = (opts.reportLabel || "دفتر") + " — صفحة مطبوعة";
     var cleanup = function () {
+      if (jobToken !== printJobToken) return;
       printRoot.innerHTML = "";
       document.body.classList.remove("print-landscape");
       document.title = previousTitle;
@@ -4588,6 +4617,7 @@ PH.print = (function () {
     resolveGeo: resolveGeo,
     renderPreview: renderPreview,
     runPrintJob: runPrintJob,
+    clearMeasureCache: clearMeasureCache,
     buildPageElement: buildPageElement,
     buildCalibrationRulerPage: buildCalibrationRulerPage
   };
@@ -4776,7 +4806,11 @@ PH.exporter = (function () {
       var name = sheetNameFor(sheet.combination, cfg.REPORTS_BY_ID[opts.reportId].label, usedNames);
       XLSX.utils.book_append_sheet(wb, ws, name);
     });
-    var fileName = buildFileName({ month: opts.month, reportId: opts.reportId, combination: (sheets[0] && sheets[0].combination) || { budget: null, shift: null, dispense: null }, descriptor: opts.descriptor, ext: "xlsx" });
+    var isMultiSlice = sheets.length > 1;
+    var fileNameCombination = isMultiSlice ? { budget: null, shift: null, dispense: null } : ((sheets[0] && sheets[0].combination) || { budget: null, shift: null, dispense: null });
+    var descriptor = opts.descriptor;
+    if (isMultiSlice) descriptor = (descriptor ? descriptor + "-" : "") + sheets.length + "-شرائح";
+    var fileName = buildFileName({ month: opts.month, reportId: opts.reportId, combination: fileNameCombination, descriptor: descriptor, ext: "xlsx" });
     XLSX.writeFile(wb, fileName);
     return fileName;
   }
@@ -4790,7 +4824,7 @@ PH.exporter = (function () {
     return new Promise(function (resolve, reject) {
       function next() {
         if (index >= sheets.length) {
-          zip.generateAsync({ type: "blob" }, { onUpdate: function (meta) { if (opts.onProgress) opts.onProgress(sheets.length, sheets.length, meta.percent); } }).then(function (blob) {
+          zip.generateAsync({ type: "blob" }, function (meta) { if (opts.onProgress) opts.onProgress(sheets.length, sheets.length, meta.percent); }).then(function (blob) {
             downloadBlob(blob, zipName);
             resolve(zipName);
           }).catch(reject);
@@ -6131,6 +6165,20 @@ PH.app = (function () {
     }
     var sheet = computeActiveSheet();
     var repDef = cfg.REPORTS_BY_ID[state.activeReportId];
+
+    if (repDef.id === "pages" && sheet.rows.length === 0 && store.getSourceRows().length > 0) {
+      var movementSettingsForPages = resolveSettings("movement", sheetKeyFor("movement", state.activeCombination));
+      if (movementSettingsForPages.cumulativeMode === "none") {
+        if (tableController) { tableController.destroy(); tableController = null; tableControllerKey = null; tableControllerContainer = null; }
+        container.innerHTML = "";
+        container.appendChild(el("div", { class: "table-empty-state" }, [
+          el("div", { class: "fs-body", style: "font-weight:600;" }, [text("هذا التقرير يعتمد على تراكم تقرير الحركة، وهو معطّل حاليًا.")]),
+          el("div", { class: "fs-caption text-soft" }, [text("فعّل نمط التراكم في إعدادات تقرير الحركة لإظهار صفحات الإغلاق هنا.")])
+        ]));
+        return;
+      }
+    }
+
     var textCols = repDef.columns.filter(function (c) { return !cfg.MONEY_COLUMNS[c] && c !== "pageNo" && c !== "printPageNo"; });
 
     var pipeline = query.runPipeline(sheet.rows, state.queryState, textCols, columnTypesFor(repDef.columns));
@@ -6158,9 +6206,12 @@ PH.app = (function () {
     if (pipeline.resultCount === 0 && pipeline.totalCount > 0) {
       if (tableController) { tableController.destroy(); tableController = null; tableControllerKey = null; tableControllerContainer = null; }
       container.innerHTML = "";
+      var clearFilterBtn = el("button", { class: "btn btn--secondary" }, [text("مسح الفلاتر والبحث")]);
+      clearFilterBtn.addEventListener("click", function () { resetQueryState(); render(); });
       container.appendChild(el("div", { class: "table-empty-state" }, [
         el("div", { class: "fs-body", style: "font-weight:600;" }, [text("لا توجد نتائج مطابقة")]),
-        el("div", { class: "fs-caption text-soft" }, [text("جرّب تعديل الفلاتر أو مصطلح البحث.")])
+        el("div", { class: "fs-caption text-soft" }, [text("جرّب تعديل الفلاتر أو مصطلح البحث.")]),
+        clearFilterBtn
       ]));
       return;
     }
@@ -6395,7 +6446,15 @@ PH.app = (function () {
       Object.keys(wiz.mergeDecisions).forEach(function (c) {
         if (!wiz.mergeDecisions[c]) return;
         var sugg = wiz.mergeSuggestions[c];
-        var result = store.fillBlanks(rows, { column: sugg.fieldKey, direction: "down", mode: "blanksOnly", boundaryColumn: "book" });
+        var sheetRowToIndex = {};
+        rows.forEach(function (row, i) { sheetRowToIndex[row.__sheetRow] = i; });
+        var scopeRowIds = [];
+        (sugg.rowRanges || []).forEach(function (range) {
+          for (var wr = range.startRow; wr <= range.endRow; wr++) {
+            if (sheetRowToIndex[wr] !== undefined) scopeRowIds.push(sheetRowToIndex[wr]);
+          }
+        });
+        var result = store.fillBlanks(rows, { column: sugg.fieldKey, direction: "down", mode: "blanksOnly", boundaryColumn: "book", scopeRowIds: scopeRowIds });
         rows = result.rows;
       });
       wiz.extracted = rows;
@@ -6695,33 +6754,45 @@ PH.app = (function () {
     document.addEventListener("keydown", function (e) {
       var ctrl = e.ctrlKey || e.metaKey;
       var target = e.target;
+      // e.key reflects actual case (Shift, Caps Lock), so comparing it
+      // directly against a lowercase literal silently breaks with Caps Lock
+      // on. Normalize once; multi-character key names (Escape, ArrowLeft)
+      // pass through unchanged.
+      var key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (e.key === "Escape") {
         var dialogs = document.querySelectorAll('[role="dialog"]');
         if (dialogs.length) { e.preventDefault(); removeDialog(dialogs[dialogs.length - 1]); return; }
         if (overflowMenuOpen) { e.preventDefault(); closeOverflowMenu(); var t = $("btn-overflow-toggle"); if (t) t.focus(); return; }
       }
       var editable = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
-      if (ctrl && e.key.toLowerCase() === "k") { e.preventDefault(); openCommandPalette(); return; }
+      if (ctrl && key === "k") { e.preventDefault(); openCommandPalette(); return; }
       if (editable) return;
-      if (ctrl && e.key.toLowerCase() === "f") {
+      if (ctrl && key === "f") {
         var search = document.querySelector('.main__toolbar input[placeholder^="بحث"]');
         if (search) { e.preventDefault(); search.focus(); search.select(); }
         return;
       }
-      if (ctrl && e.key === "z") { e.preventDefault(); var l = store.undo(); if (l) { render(); showToast("تراجع: " + l); } }
-      else if (ctrl && e.key === "y") { e.preventDefault(); var l2 = store.redo(); if (l2) { render(); showToast("إعادة: " + l2); } }
-      else if (ctrl && /^[1-8]$/.test(e.key)) {
+      if (ctrl && key === "z") { e.preventDefault(); var l = store.undo(); if (l) { render(); showToast("تراجع: " + l); } }
+      else if (ctrl && key === "y") { e.preventDefault(); var l2 = store.redo(); if (l2) { render(); showToast("إعادة: " + l2); } }
+      else if (ctrl && /^[1-8]$/.test(key)) {
         e.preventDefault();
-        var rep = cfg.REPORTS.filter(function (r) { return r.shortcut === e.key; })[0];
+        var rep = cfg.REPORTS.filter(function (r) { return r.shortcut === key; })[0];
         if (rep) { if (state.activeReportId !== rep.id) resetQueryState(); state.activeReportId = rep.id; render(); }
-      } else if (ctrl && e.key === "p") { e.preventDefault(); openPrintPreview(); }
-      else if (ctrl && e.key === "e") { e.preventDefault(); runExport(); }
-      else if (ctrl && e.shiftKey && (e.key === "t" || e.key === "T")) { e.preventDefault(); runSelfTestOverlay(); }
+      } else if (ctrl && key === "p") { e.preventDefault(); openPrintPreview(); }
+      else if (ctrl && key === "e") { e.preventDefault(); runExport(); }
+      else if (ctrl && e.shiftKey && key === "t") { e.preventDefault(); runSelfTestOverlay(); }
     });
   }
 
   function isViewFiltered() {
     return state.queryState.filters.length > 0 || !!state.queryState.searchText || state.queryState.sortLevels.length > 0;
+  }
+
+  // Sorting alone changes row order (and so needs re-blocking) but is not a
+  // filter - a sorted-but-unfiltered print should never be stamped "(مصفّى)".
+  // That stamp is a provenance claim on a document people sign.
+  function hasActiveFilterOrSearch() {
+    return state.queryState.filters.length > 0 || !!state.queryState.searchText;
   }
 
   function reportUsesBlocking(repDef) {
@@ -6757,11 +6828,11 @@ PH.app = (function () {
     var settings = resolveSettings(state.activeReportId, sheetKeyFor(state.activeReportId, state.activeCombination));
     var outputRows = outputRowsFor(sheet, repDef);
     var printColumns = cfg.printableColumns(repDef.columns);
-    // Single source of truth for "did the active filter actually change what's being
-    // printed" - drives both the header label suffix and the print footer marker, so
-    // the two can no longer disagree with each other.
-    var didApplyView = outputRows !== sheet.rows;
-    var reportLabel = repDef.label + activeScopeSuffix() + (didApplyView ? " (مصفّى)" : "");
+    // A "(مصفّى)" stamp is a provenance claim on a document people sign - it
+    // must reflect only filter/search, never a sort (which still triggers
+    // outputRowsFor's re-blocking above, just doesn't earn the stamp).
+    var isFilteredForDisplay = hasActiveFilterOrSearch();
+    var reportLabel = repDef.label + activeScopeSuffix() + (isFilteredForDisplay ? " (مصفّى)" : "");
     var orientation = "portrait";
     var calibration = { offsetTopMm: 0, offsetBottomMm: 0, offsetInnerMm: 0, offsetOuterMm: 0, scalePercent: 0 };
     var showingRuler = false;
@@ -6785,7 +6856,7 @@ PH.app = (function () {
     body.appendChild(calPanel);
     overlay.appendChild(toolbar);
     overlay.appendChild(body);
-    registerDialog(overlay);
+    registerDialog(overlay, { onClose: function () { PH.print.clearMeasureCache(); } });
 
     function refreshPreview() {
       if (showingRuler) {
@@ -6794,7 +6865,7 @@ PH.app = (function () {
         shell.appendChild(PH.print.buildCalibrationRulerPage(calibration, orientation));
         previewContainer.appendChild(shell);
       } else {
-        PH.print.renderPreview(previewContainer, outputRows, { rowsPerPage: settings.rowsPerPage || 24, columns: printColumns, reportLabel: reportLabel, orientation: orientation, calibration: calibration, isFiltered: didApplyView, hasFilledMoney: outputRows.some(function (r) { return r.__filled; }), printTotalField: repDef.printTotalField });
+        PH.print.renderPreview(previewContainer, outputRows, { rowsPerPage: settings.rowsPerPage || 24, columns: printColumns, reportLabel: reportLabel, orientation: orientation, calibration: calibration, isFiltered: isFilteredForDisplay, hasFilledMoney: outputRows.some(function (r) { return r.__filled; }), printTotalField: repDef.printTotalField });
       }
     }
 
@@ -6859,7 +6930,7 @@ PH.app = (function () {
       if (calPanel.style.display !== "none") buildCalPanel();
     });
     printBtn.addEventListener("click", function () {
-      PH.print.runPrintJob(outputRows, { rowsPerPage: settings.rowsPerPage || 24, columns: printColumns, reportLabel: reportLabel, orientation: orientation, calibration: calibration, isFiltered: didApplyView, hasFilledMoney: outputRows.some(function (r) { return r.__filled; }), printTotalField: repDef.printTotalField });
+      PH.print.runPrintJob(outputRows, { rowsPerPage: settings.rowsPerPage || 24, columns: printColumns, reportLabel: reportLabel, orientation: orientation, calibration: calibration, isFiltered: isFilteredForDisplay, hasFilledMoney: outputRows.some(function (r) { return r.__filled; }), printTotalField: repDef.printTotalField });
     });
 
     store.loadCalibrationProfiles().then(function (profiles) {
@@ -6904,12 +6975,12 @@ PH.app = (function () {
     });
     var monthValues = rows.map(function (r) { return r.month; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
     var exportMonth = monthValues.length === 1 ? monthValues[0] : (monthValues.length ? "متعدد" : "غير-محدد");
-    var progress = el("div", { class: "panel-2", style: "position:fixed; inset-inline-start:50%; top:50%; transform:translate(-50%,-50%); z-index:90; width:320px;" }, [
+    var progress = el("div", { class: "panel-2", role: "dialog", "aria-modal": "true", "aria-label": "تجهيز ملف ZIP", style: "position:fixed; inset-inline-start:50%; top:50%; transform:translate(-50%,-50%); z-index:90; width:320px;" }, [
       el("div", { class: "fs-body" }, [text("جارٍ تجهيز ملف ZIP…")]),
       el("div", { class: "progress-bar", style: "margin-top:var(--sp-3);" }, [el("div", { class: "progress-bar__fill", style: "width:0%;" })]),
       el("div", { class: "fs-caption text-soft", style: "margin-top:var(--sp-2);" }, [text("0 / " + sheets.length)])
     ]);
-    document.body.appendChild(progress);
+    registerDialog(progress);
     var fill = progress.querySelector(".progress-bar__fill");
     var caption = progress.querySelector(".fs-caption");
     PH.exporter.exportZipPerSheet(sheets, { month: exportMonth, reportId: reportId, onProgress: function (done, total, percent) {
@@ -6917,10 +6988,10 @@ PH.app = (function () {
       fill.style.width = Math.max(0, Math.min(100, pct)) + "%";
       caption.textContent = percent !== undefined && done === total ? "ضغط الملف…" : done + " / " + total;
     } }).then(function (zipName) {
-      progress.remove();
+      removeDialog(progress);
       showToast("تم تصدير " + zipName);
     }).catch(function (err) {
-      progress.remove();
+      removeDialog(progress);
       showToast("تعذّر تصدير ZIP: " + (err && err.message ? err.message : "خطأ غير معروف"), false);
     });
   }
@@ -6988,7 +7059,10 @@ PH.app = (function () {
     var closeBtn = el("button", { class: "btn btn--tertiary" }, [text("إغلاق ✕")]);
     closeBtn.addEventListener("click", function () { removeDialog(overlay); });
     overlay.appendChild(closeBtn);
+    var existingMonths = store.getSourceRows().map(function (r) { return r.month; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+    var defaultMonth = state.activeMonth || (existingMonths.length === 1 ? existingMonths[0] : "");
     PH.viewEntry.createGuidedForm(overlay, {
+      defaultMonth: defaultMonth,
       onCommit: function () { showToast("تمت الإضافة"); }
     });
     registerDialog(overlay);
@@ -7015,12 +7089,7 @@ PH.app = (function () {
       dimensionGroups: state.dimensionGroups
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "daftar-workspace-backup.json";
-    a.click();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    PH.exporter.downloadBlob(blob, "daftar-workspace-backup.json");
     showToast("تم حفظ النسخة الاحتياطية");
   }
 
@@ -7068,7 +7137,7 @@ PH.app = (function () {
     reader.readAsText(file, "utf-8");
   }
 
-  return { init: init, state: state, computeActiveSheet: computeActiveSheet, render: render, decodeTextBuffer: decodeTextBuffer, downloadTemplate: downloadTemplate, exportWorkspaceBackup: exportWorkspaceBackup, restoreWorkspaceBackup: restoreWorkspaceBackup };
+  return { init: init, state: state, computeActiveSheet: computeActiveSheet, render: render, decodeTextBuffer: decodeTextBuffer, downloadTemplate: downloadTemplate, exportWorkspaceBackup: exportWorkspaceBackup, restoreWorkspaceBackup: restoreWorkspaceBackup, handleFile: handleFile };
 })();
 
 document.addEventListener("DOMContentLoaded", function () { PH.app.init(); });
@@ -7114,23 +7183,7 @@ document.getElementById("btn-import").addEventListener("click", function () {
   input.type = "file";
   input.accept = ".xlsx,.xls,.xlsm,.csv";
   input.addEventListener("change", function () {
-    if (input.files.length && window.PH && PH.app) {
-      var reader = new FileReader();
-      var file = input.files[0];
-      var ext = PH.importer.fileExtensionOf(file.name);
-      reader.onload = function () {
-        try {
-          var csvText = PH.app.decodeTextBuffer(reader.result);
-          var delimiter = csvText.indexOf("\t") !== -1 ? "\t" : (csvText.indexOf(";") !== -1 ? ";" : ",");
-          var wb = ext === "csv" ? PH.importer.readWorkbookFromText(csvText, delimiter) : PH.importer.readWorkbookFromArrayBuffer(reader.result);
-          PH.app.state.pendingImport = wb;
-          document.dispatchEvent(new CustomEvent("ph-import-file", { detail: wb }));
-        } catch (err) {
-          alert("تعذّرت قراءة الملف: " + (err && err.message ? err.message : "ملف غير صالح"));
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    }
+    if (input.files.length && window.PH && PH.app) PH.app.handleFile(input.files[0]);
   });
   input.click();
 });
