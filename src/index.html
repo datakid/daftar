@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<script>
+try {
+  var savedTheme = localStorage.getItem("daftar-theme");
+  if (savedTheme === "dark" || savedTheme === "light") document.documentElement.setAttribute("data-theme", savedTheme);
+  else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.setAttribute("data-theme", "dark");
+} catch (e) {}
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>دفتر — تقارير الصيدلية</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7.5' fill='%231F6F5C'/%3E%3Cpath fill='%23F7F4EE' fill-rule='evenodd' d='M7.8 11.4 L12.2 7 H15.6 C20.9 7 24.2 11 24.2 16 C24.2 21 20.9 25 15.6 25 H7.8 Z M12.6 11.9 H15.6 C17.9 11.9 19.3 13.6 19.3 16 C19.3 18.4 17.9 20.1 15.6 20.1 H12.6 Z'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/png;base64,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">
+
+<!--CSS-->
+</head>
+<body>
+
+<div class="app-shell">
+  <div class="title-bar glass">
+    <div class="title-bar__mark">
+      <svg width="20" height="20" viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" d="M7.8 11.4 L12.2 7 H15.6 C20.9 7 24.2 11 24.2 16 C24.2 21 20.9 25 15.6 25 H7.8 Z M12.6 11.9 H15.6 C17.9 11.9 19.3 13.6 19.3 16 C19.3 18.4 17.9 20.1 15.6 20.1 H12.6 Z"></path>
+      </svg>
+    </div>
+    <div class="title-bar__name">دفتر</div>
+
+    <div class="report-tabs" id="report-tabs" role="tablist"></div>
+    <div class="report-switcher-dropdown-wrap">
+      <button class="btn btn--secondary" id="btn-report-switcher-dropdown" type="button" aria-haspopup="true" aria-expanded="false">
+        <span id="report-switcher-dropdown-label">تقرير</span>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </button>
+    </div>
+
+    <div class="title-bar__spacer"></div>
+
+    <div class="search-field-wrap" id="search-field-wrap">
+      <button class="search-field__icon-btn" id="search-field-icon-btn" type="button" title="بحث · Ctrl F — اكتب > للأوامر · Ctrl K">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5" stroke-linecap="round"></path></svg>
+      </button>
+      <input type="text" class="search-field" id="search-field" placeholder="بحث… أو اكتب &gt; للأوامر" autocomplete="off">
+      <kbd class="search-field__hint">Ctrl K</kbd>
+    </div>
+
+    <button class="btn btn--secondary" id="btn-scope" type="button" aria-haspopup="true" aria-expanded="false" title="النطاق الحالي">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8Z" stroke-linejoin="round"></path></svg>
+      <span id="scope-btn-label">كل النطاق</span>
+      <span id="scope-btn-badge" class="pill__count" style="margin-inline-start:auto;"></span>
+    </button>
+
+    <div class="row" id="toolbar-actions">
+      <button class="btn btn--secondary" id="btn-export" type="button" title="تصدير Excel (Ctrl+E)">تصدير</button>
+      <button class="btn btn--primary" id="btn-print" type="button">طباعة</button>
+      <button class="btn btn--ghost btn--icon" id="btn-theme" type="button" title="المظهر">
+        <svg class="icon" id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></svg>
+      </button>
+      <button class="btn btn--ghost btn--icon" id="btn-settings-drawer" type="button" title="الإعدادات (Ctrl+,)">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M12 3.5v2.1M12 18.4v2.1M20.5 12h-2.1M5.6 12H3.5M17.66 6.34l-1.49 1.49M7.83 16.17l-1.49 1.49M17.66 17.66l-1.49-1.49M7.83 7.83L6.34 6.34" stroke-linecap="round"></path>
+        </svg>
+      </button>
+      <div class="overflow-wrap">
+        <button class="btn btn--ghost btn--icon" id="btn-overflow-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="overflow-menu" title="المزيد">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="5.5" r="1.6"></circle>
+            <circle cx="12" cy="12" r="1.6"></circle>
+            <circle cx="12" cy="18.5" r="1.6"></circle>
+          </svg>
+        </button>
+        <div class="overflow-menu glass" id="overflow-menu" role="menu" hidden>
+          <button role="menuitem" id="btn-import" title="استيراد ملف Excel أو CSV">استيراد</button>
+          <button role="menuitem" id="btn-add" title="إضافة صف يدويًا">إضافة</button>
+          <button role="menuitem" id="btn-template" title="تحميل نموذج بيانات فارغ مع دليل الأعمدة">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 4v11m0 0l-3.5-3.5M12 15l3.5-3.5" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="M5 18.5h14" stroke-linecap="round"></path>
+            </svg>
+            نموذج
+          </button>
+          <button role="menuitem" id="btn-backup" title="حفظ نسخة كاملة من البيانات والإعدادات">نسخة احتياطية</button>
+          <button role="menuitem" id="btn-restore" title="استعادة نسخة كاملة من البيانات والإعدادات">استعادة</button>
+          <button role="menuitem" id="btn-pharmacy-profile" title="اسم الصيدلية والشعار وبيانات الترخيص وترويسة الطباعة">بيانات الصيدلية</button>
+          <button role="menuitem" id="btn-saved-views" title="حفظ إعدادات التقرير الحالي أو الرجوع إلى عرض محفوظ">العروض المحفوظة</button>
+          <button role="menuitem" id="btn-selftest" title="فحص ذاتي (Ctrl+Shift+T)">فحص ذاتي</button>
+        </div>
+      </div>
+    </div>
+    <div class="title-bar__save-state" id="save-state"></div>
+    <button class="save-status-dot" id="save-status-dot" type="button" title="تعذّر الحفظ — صدّر نسخة احتياطية" style="display:none;"></button>
+  </div>
+
+  <div class="save-error-banner" id="save-error-banner" role="alert" style="display:none;"></div>
+
+  <div class="main">
+    <div class="main__content" id="main-content" role="tabpanel" tabindex="0"></div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+<script src="xlsx.full.min.js"></script>
+<script src="jszip.min.js"></script>
+
+<script>
+window.PH_FIXTURES = null;
+</script>
+
+<!--JS-->
+</body>
+</html>
