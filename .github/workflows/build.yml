@@ -18,21 +18,21 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repo
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Synchronize with main
+      - name: Sync with latest main
         run: |
           git fetch origin main
           git rebase origin/main
 
-      - name: Build
+      - name: Build dist
         run: sh build.sh
 
-      - name: Commit and push generated files
+      - name: Commit generated files
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
@@ -40,9 +40,12 @@ jobs:
           git add dist
 
           if git diff --cached --quiet; then
-            echo "dist is already up to date"
+            echo "No dist changes to commit"
             exit 0
           fi
 
           git commit -m "Build dist/daftar.html"
+
+      - name: Push generated files
+        run: |
           git push origin HEAD:main
