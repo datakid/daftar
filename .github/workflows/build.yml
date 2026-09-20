@@ -1,4 +1,5 @@
 name: Build daftar
+
 on:
   workflow_dispatch:
   push:
@@ -6,21 +7,42 @@ on:
     paths:
       - "src/**"
       - "build.sh"
+
 permissions:
   contents: write
+
 concurrency:
-  group: build-daftar
+  group: build-daftar-main
   cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v5
-      - run: sh build.sh
-      - run: |
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Synchronize with main
+        run: |
+          git fetch origin main
+          git rebase origin/main
+
+      - name: Build
+        run: sh build.sh
+
+      - name: Commit and push generated files
+        run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
+
           git add dist
-          git diff --cached --quiet || git commit -m "Build dist/daftar.html"
-          git pull --rebase origin main
-          git push
+
+          if git diff --cached --quiet; then
+            echo "dist is already up to date"
+            exit 0
+          fi
+
+          git commit -m "Build dist/daftar.html"
+          git push origin HEAD:main
