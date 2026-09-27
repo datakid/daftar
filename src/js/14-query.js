@@ -254,18 +254,32 @@ PH.query = function() {
   }
   function runPipeline(rows, state, textColumns, columnTypes) {
     var filtered = applyFilters(rows, state.filters);
-    var searched = state.searchText ? searchRows(filtered, state.searchText, textColumns).sort(function(a, b) {
-      return a.index - b.index;
-    }).map(function(x) {
-      return x.row;
-    }) : filtered;
+    var searched = filtered;
+    if (state.searchText && state.searchText.trim()) {
+      var hit = new Set;
+      searchRows(filtered, state.searchText, textColumns).forEach(function(x) {
+        hit.add(x.index);
+      });
+      var anyData = false;
+      searched = filtered.filter(function(r, i) {
+        var keep = hit.has(i) && !isMarkerRow(r);
+        if (keep) anyData = true;
+        return keep || isMarkerRow(r);
+      });
+      if (!anyData) searched = [];
+    }
     var sorted = applySort(searched, state.sortLevels, columnTypes);
+    function dataCount(list) {
+      var n = 0;
+      for (var i = 0; i < list.length; i++) if (!isMarkerRow(list[i])) n++;
+      return n;
+    }
     return {
       filtered,
       searched,
       sorted,
-      resultCount: searched.length,
-      totalCount: rows.length
+      resultCount: dataCount(searched),
+      totalCount: dataCount(rows)
     };
   }
   function markScopeTotals(rows) {

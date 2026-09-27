@@ -75,7 +75,7 @@ PH.print = function() {
     };
     return metrics;
   }
-  function buildPageElement(pageData, geo, columns, reportLabel, orientation, marginsMm, totalField, pharmacyProfile, userProfile) {
+  function buildPageElement(pageData, geo, columns, reportLabel, orientation, marginsMm, totalField, pharmacyProfile, userProfile, pagesTotal) {
     var isLandscape = orientation === "landscape";
     var pageEl = el("div", {
       class: "page" + (isLandscape ? " print-landscape" : "")
@@ -98,10 +98,26 @@ PH.print = function() {
     grid.style.width = 100 / contentScale + "%";
     grid.style.height = 100 / contentScale + "%";
     var pharmacyName = pharmacyProfile && pharmacyProfile.name ? pharmacyProfile.name : "";
-    var headerLabel = pharmacyName ? pharmacyName + " · " + reportLabel : reportLabel;
+    var pharmacyCode = pharmacyProfile && pharmacyProfile.code ? pharmacyProfile.code : "";
+    var headerLabel = pharmacyName ? pharmacyName + (pharmacyCode ? " (" + pharmacyCode + ")" : "") + " · " + reportLabel : reportLabel;
+    var brandEl = el("span", {
+      class: "page-header__brand"
+    });
+    if (pharmacyProfile && typeof pharmacyProfile.logo === "string" && pharmacyProfile.logo.indexOf("data:image") === 0) {
+      var logoImg = el("img", {
+        class: "page-header__logo",
+        alt: ""
+      });
+      logoImg.src = pharmacyProfile.logo;
+      brandEl.appendChild(logoImg);
+    }
+    brandEl.appendChild(text(headerLabel));
+    var pageLabel = "صفحة " + pageData.pageNumber + (pagesTotal ? " من " + pagesTotal : "");
     var headerTop = el("div", {
       class: "page-header__top"
-    }, [ el("span", {}, [ text(headerLabel) ]), el("span", {}, [ text("صفحة " + pageData.pageNumber) ]) ]);
+    }, [ brandEl, el("span", {
+      style: "white-space:nowrap;"
+    }, [ text(pageLabel) ]) ]);
     var headerColumns = el("div", {
       class: "page-header__columns"
     });
@@ -183,6 +199,7 @@ PH.print = function() {
     }, [ text(totalsParts.join("   ·   ")) ]);
     grid.appendChild(totals);
     var footerLeftText = (pageData.filteredMarker || "") + (pageData.filledMarker ? " " + pageData.filledMarker : "");
+    if (pharmacyProfile && pharmacyProfile.printNote) footerLeftText = (footerLeftText ? footerLeftText + " · " : "") + pharmacyProfile.printNote;
     if (userProfile && userProfile.displayName) footerLeftText = (footerLeftText ? footerLeftText + " · " : "") + "أعدّه: " + userProfile.displayName;
     var signatureRoles = pharmacyProfile && pharmacyProfile.signatureRoles && pharmacyProfile.signatureRoles.filter(function(r) {
       return r;
@@ -234,7 +251,7 @@ PH.print = function() {
     });
     function realizePage(idx) {
       var pageData = pagesResult.pages[idx];
-      var pageEl = buildPageElement(pageData, geometry, opts.columns, opts.reportLabel, orientation, calibratedGeo, totalField, opts.pharmacyProfile, opts.userProfile);
+      var pageEl = buildPageElement(pageData, geometry, opts.columns, opts.reportLabel, orientation, calibratedGeo, totalField, opts.pharmacyProfile, opts.userProfile, pagesResult.pageCount);
       var wrapper = el("div", {
         class: "print-preview-page",
         "data-page-index": String(idx)
@@ -331,21 +348,27 @@ PH.print = function() {
       hasFilledMoney: opts.hasFilledMoney
     });
     pagesResult.pages.forEach(function(pageData) {
-      var pageEl = buildPageElement(pageData, geometry, opts.columns, opts.reportLabel, opts.orientation, calibratedGeo, totalField, opts.pharmacyProfile, opts.userProfile);
+      var pageEl = buildPageElement(pageData, geometry, opts.columns, opts.reportLabel, opts.orientation, calibratedGeo, totalField, opts.pharmacyProfile, opts.userProfile, pagesResult.pageCount);
       printRoot.appendChild(pageEl);
     });
     var previousTitle = document.title;
     document.title = (opts.reportLabel || "دفتر") + " — صفحة مطبوعة";
+    var cleanedUp = false;
     var cleanup = function() {
-      if (jobToken !== printJobToken) return;
+      if (cleanedUp || jobToken !== printJobToken) return;
+      cleanedUp = true;
       printRoot.innerHTML = "";
       document.body.classList.remove("print-landscape");
       document.title = previousTitle;
       window.removeEventListener("afterprint", cleanup);
     };
     window.addEventListener("afterprint", cleanup);
-    window.print();
-    setTimeout(cleanup, 2e4);
+    var fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+    fontsReady.then(function() {
+      if (jobToken !== printJobToken) return;
+      window.print();
+      setTimeout(cleanup, 2e4);
+    });
     return pagesResult;
   }
   function buildCalibrationRulerPage(calibration, orientation) {

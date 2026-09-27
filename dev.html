@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<script>
+try {
+  var savedTheme = localStorage.getItem("daftar-theme");
+  if (savedTheme === "dark" || savedTheme === "light") document.documentElement.setAttribute("data-theme", savedTheme);
+  else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.setAttribute("data-theme", "dark");
+} catch (e) {}
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F6F4EF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111319" media="(prefers-color-scheme: dark)">
+<meta name="description" content="دفتر — تقارير الصيدلية: الحركة، الجرد، الأرصدة، متوسط الأسعار والطباعة على نماذج الدفاتر. يعمل بالكامل داخل المتصفح.">
+<title>دفتر — تقارير الصيدلية</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232E48A6'/%3E%3Cpath fill='%23F6F4EF' d='M10.5 6h11a2.5 2.5 0 0 1 0 5H21v10h.5a2.5 2.5 0 0 1 0 5h-11a2.5 2.5 0 0 1 0-5h.5V11h-.5a2.5 2.5 0 0 1 0-5Z'/%3E%3Cpath d='M13 14.5h6M15.5 17.5h3.5' stroke='%232E48A6' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%232E48A6'/%3E%3Cpath fill='%23F6F4EF' d='M10.5 6h11a2.5 2.5 0 0 1 0 5H21v10h.5a2.5 2.5 0 0 1 0 5h-11a2.5 2.5 0 0 1 0-5h.5V11h-.5a2.5 2.5 0 0 1 0-5Z'/%3E%3Cpath d='M13 14.5h6M15.5 17.5h3.5' stroke='%232E48A6' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E">
+
+<!-- DEV HARNESS: loads unbundled sources. Not part of the build output (build.sh only reads src/). -->
+<link rel="stylesheet" href="src/css/daftar.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <header class="title-bar glass" id="title-bar">
+    <div class="brand" id="brand">
+      <svg class="title-bar__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <rect width="32" height="32" rx="8" fill="#2E48A6"></rect>
+        <path fill="#F6F4EF" d="M10.5 6h11a2.5 2.5 0 0 1 0 5H21v10h.5a2.5 2.5 0 0 1 0 5h-11a2.5 2.5 0 0 1 0-5h.5V11h-.5a2.5 2.5 0 0 1 0-5Z"></path>
+        <path d="M13 14.5h6M15.5 17.5h3.5" stroke="#2E48A6" stroke-width="1.5" stroke-linecap="round"></path>
+      </svg>
+      <div class="brand__text">
+        <div class="title-bar__name">دفتر</div>
+        <div class="brand__tagline">تقارير الصيدلية</div>
+      </div>
+    </div>
+
+    <div class="search-field-wrap" id="search-field-wrap">
+      <button class="search-field__icon-btn" id="search-field-icon-btn" type="button" aria-label="بحث" title="بحث · Ctrl F — اكتب &gt; للأوامر · Ctrl K">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5" stroke-linecap="round"></path></svg>
+      </button>
+      <input type="search" class="search-field" id="search-field" placeholder="ابحث في التقرير… أو اكتب &gt; للأوامر" autocomplete="off" spellcheck="false" aria-label="بحث في التقرير الحالي">
+      <kbd class="search-field__hint" id="search-field-hint">Ctrl K</kbd>
+    </div>
+
+    <div class="title-bar__spacer"></div>
+
+    <div class="title-bar__save-state" id="save-state" role="status" aria-live="polite"></div>
+    <button class="save-status-dot" id="save-status-dot" type="button" title="تعذّر الحفظ — صدّر نسخة احتياطية" aria-label="تعذّر الحفظ" style="display:none;"></button>
+
+    <button class="btn btn--secondary" id="btn-scope" type="button" aria-haspopup="true" aria-expanded="false" title="نطاق البيانات (الموازنة · الفترة · الصرف · الشهر)">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8Z" stroke-linejoin="round"></path></svg>
+      <span id="scope-btn-label">كل النطاق</span>
+      <span id="scope-btn-badge" class="pill__count"></span>
+    </button>
+
+    <div class="title-bar__divider"></div>
+
+    <div class="row" id="toolbar-actions" style="gap:6px;">
+      <button class="btn btn--secondary" id="btn-export" type="button" title="تصدير Excel (Ctrl+E)" aria-label="تصدير">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 4v11m0-11L8.5 7.5M12 4l3.5 3.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" stroke-linecap="round"></path></svg>
+        <span class="btn-label">تصدير</span>
+      </button>
+      <button class="btn btn--primary" id="btn-print" type="button" title="طباعة (Ctrl+P)" aria-label="طباعة">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2" stroke-linejoin="round"></path><path d="M7 14h10v6H7z" stroke-linejoin="round"></path></svg>
+        <span class="btn-label">طباعة</span>
+      </button>
+      <button class="btn btn--ghost btn--icon" id="btn-theme" type="button" title="المظهر" aria-label="تبديل المظهر">
+        <svg class="icon" id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></svg>
+      </button>
+      <button class="btn btn--ghost btn--icon" id="btn-settings-drawer" type="button" title="إعدادات التقرير (Ctrl+,)" aria-label="الإعدادات">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+      </button>
+      <div class="overflow-wrap">
+        <button class="btn btn--ghost btn--icon" id="btn-overflow-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="overflow-menu" title="المزيد" aria-label="المزيد">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5.5" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="12" cy="18.5" r="1.6"></circle></svg>
+        </button>
+        <div class="overflow-menu" id="overflow-menu" role="menu" hidden>
+          <button role="menuitem" type="button" id="btn-import" title="استيراد ملف Excel أو CSV">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m0 11l-3.5-3.5M12 15l3.5-3.5"></path><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path></svg>
+            استيراد ملف
+          </button>
+          <button role="menuitem" type="button" id="btn-add" title="إضافة صف يدويًا">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+            إضافة صف
+          </button>
+          <button role="menuitem" type="button" id="btn-template" title="تحميل نموذج بيانات فارغ مع دليل الأعمدة">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5M10 13h6M10 17h6"></path></svg>
+            نموذج بيانات فارغ
+          </button>
+          <hr>
+          <button role="menuitem" type="button" id="btn-saved-views" title="حفظ إعدادات التقرير الحالي أو الرجوع إلى عرض محفوظ">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 4h12v16l-6-4-6 4z"></path></svg>
+            العروض المحفوظة
+          </button>
+          <button role="menuitem" type="button" id="btn-pharmacy-profile" title="اسم الصيدلية والشعار وبيانات الترخيص وترويسة الطباعة">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V9l8-5 8 5v11z"></path><path d="M12 10v6M9 13h6"></path></svg>
+            بيانات الصيدلية
+          </button>
+          <button role="menuitem" type="button" id="btn-theme-menu" class="overflow-menu__only-compact">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"></path></svg>
+            تبديل المظهر
+          </button>
+          <hr>
+          <button role="menuitem" type="button" id="btn-backup" title="حفظ نسخة كاملة من البيانات والإعدادات">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"></path><path d="M8 4v5h7V4M8 20v-6h8v6"></path></svg>
+            نسخة احتياطية
+          </button>
+          <button role="menuitem" type="button" id="btn-restore" title="استعادة نسخة كاملة من البيانات والإعدادات">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5"></path><path d="M4 4v4.5h4.5"></path></svg>
+            استعادة نسخة
+          </button>
+          <button role="menuitem" type="button" id="btn-selftest" title="فحص ذاتي (Ctrl+Shift+T)">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"></path></svg>
+            فحص ذاتي
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="save-error-banner" id="save-error-banner" role="alert" style="display:none;"></div>
+
+  <div class="app-body">
+    <nav class="report-rail" id="report-rail" aria-label="التقارير">
+      <div class="report-rail__label">التقارير</div>
+      <div class="report-tabs" id="report-tabs" role="tablist" aria-orientation="vertical"></div>
+      <div class="report-rail__footer">
+        <button class="rail-action" type="button" id="rail-import">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m0 11l-3.5-3.5M12 15l3.5-3.5"></path><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path></svg>
+          استيراد ملف
+        </button>
+        <button class="rail-action" type="button" id="rail-add">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+          إضافة صف
+        </button>
+        <button class="rail-action" type="button" id="rail-pharmacy">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V9l8-5 8 5v11z"></path><path d="M12 10v6M9 13h6"></path></svg>
+          بيانات الصيدلية
+        </button>
+      </div>
+    </nav>
+
+    <main class="main" id="main">
+      <div class="main__content" id="main-content" role="tabpanel" tabindex="-1"></div>
+    </main>
+  </div>
+</div>
+
+<div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+<div class="drag-veil" id="drag-veil" aria-hidden="true">أفلت للاستيراد</div>
+
+<script src="xlsx.full.min.js"></script>
+<script src="jszip.min.js"></script>
+
+<script>
+window.PH_FIXTURES = null;
+try { localStorage.removeItem("daftar-last-report"); } catch (e) {}
+</script>
+<script>window.DEV_PRESET = { /* e.g. demo: "1", report: "groups", open: "settings" */ };</script>
+
+<script src="src/js/00-namespace.js"></script>
+<script src="src/js/01-config.js"></script>
+<script src="src/js/02-util.js"></script>
+<script src="src/js/03-cache.js"></script>
+<script src="src/js/04-normalize.js"></script>
+<script src="src/js/05-dom.js"></script>
+<script src="src/js/06-popover.js"></script>
+<script src="src/js/07-ui.js"></script>
+<script src="src/js/08-store.js"></script>
+<script src="src/js/09-settings.js"></script>
+<script src="src/js/10-blocks.js"></script>
+<script src="src/js/11-format.js"></script>
+<script src="src/js/12-reports.js"></script>
+<script src="src/js/13-matrix.js"></script>
+<script src="src/js/14-query.js"></script>
+<script src="src/js/15-validate.js"></script>
+<script src="src/js/16-importer.js"></script>
+<script src="src/js/17-average.js"></script>
+<script src="src/js/18-paginate.js"></script>
+<script src="src/js/19-viewTable.js"></script>
+<script src="src/js/20-viewEntry.js"></script>
+<script src="src/js/21-print.js"></script>
+<script src="src/js/22-exportPlan.js"></script>
+<script src="src/js/23-exporter.js"></script>
+<script src="src/js/24-selftest.js"></script>
+<script src="src/js/25-snapshot.js"></script>
+<script src="src/js/26-app.js"></script>
+<script src="src/js/99-boot.js"></script>
+<script>
+/* dev-only: DEV_PRESET or ?demo=1&report=id&open=settings|add|export|print|scope|menu|pharmacy|selftest */
+(function() {
+  var q = new URLSearchParams(location.search);
+  var preset = window.DEV_PRESET || {};
+  Object.keys(preset).forEach(function(k) { q.set(k, preset[k]); });
+  if (!q.get("demo")) return;
+  window.addEventListener("load", function() {
+    setTimeout(function() {
+      var src = PH.selftest.generateFixtureSource(20260701, 120).map(function(r, i) {
+        r.group = ["مسكنات", "مضادات حيوية", "قلب", null][i % 4];
+        r.received = i % 5 === 0 ? 30 : 0;
+        r.shift = i % 3 ? "صباحي" : "مسائي";
+        return r;
+      });
+      PH.store.setSourceRows(src, "demo", true);
+      if (q.get("report")) document.getElementById("tab-" + q.get("report")).click();
+      var open = q.get("open");
+      var map = { settings: "btn-settings-drawer", add: "btn-add", export: "btn-export", print: "btn-print", scope: "btn-scope", menu: "btn-overflow-toggle", pharmacy: "btn-pharmacy-profile", selftest: "btn-selftest" };
+      if (open && map[open]) setTimeout(function() { document.getElementById(map[open]).click(); }, 150);
+    }, 400);
+  });
+})();
+</script>
+</body>
+</html>

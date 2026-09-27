@@ -1,4 +1,8 @@
 PH.popover = function() {
+  var openCount = 0;
+  function isAnyOpen() {
+    return openCount > 0;
+  }
   function position(el, anchorEl, opts) {
     opts = opts || {};
     var margin = typeof opts.margin === "number" ? opts.margin : 8;
@@ -52,6 +56,7 @@ PH.popover = function() {
       }
     }
     var cancelled = false;
+    if (closeOnEscape) openCount++;
     if (!delayAll) {
       if (repositionOnResize) window.addEventListener("resize", reposition);
       if (repositionOnScroll) window.addEventListener("scroll", reposition, { capture: true, passive: true });
@@ -67,11 +72,14 @@ PH.popover = function() {
       }
     }, 0);
     function cleanup() {
+      if (!cancelled && closeOnEscape) openCount = Math.max(0, openCount - 1);
       cancelled = true;
       document.removeEventListener("click", onDocClick);
       document.removeEventListener("keydown", onDocKey);
       window.removeEventListener("resize", reposition);
-      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("scroll", reposition, {
+        capture: true
+      });
     }
     return {
       close: onClose,
@@ -96,7 +104,8 @@ PH.popover = function() {
   return {
     position,
     attach,
-    fadeOutAndRemove
+    fadeOutAndRemove,
+    isAnyOpen
   };
 }();
 

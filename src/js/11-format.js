@@ -17,7 +17,8 @@ PH.format = function() {
       return (negative ? "-" : "") + parts.join(".");
     }
     if (typeof value === "number") {
-      var numeric = Number.isInteger(value) ? String(value) : value.toFixed(2);
+      if (!isFinite(value)) return "";
+      var numeric = Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
       return columnKey === "variancePct" ? numeric + "%" : numeric;
     }
     return String(value);
